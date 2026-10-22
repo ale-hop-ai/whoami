@@ -61,6 +61,13 @@ observations and interpretations separated.
 Phase 2 exit: a results summary document with verdicts for H1–H6 and a
 decision on Phase 4 per `03-experiments.md` §7.
 
+Status 2026-10-22: M5, M6, M7 done on branch `feat/phase2-experiments`.
+Held-out reports are in `docs/results/`; the summary is
+`docs/phase2-results.md`. The `Shuffled` lesion was dropped (no hypothesis
+used it). Changes to the organism forced by the `far` family are recorded as
+dated amendments in `02-architecture.md` and were made before the config was
+frozen (`configs/default.json`, hash in every report).
+
 ## Phase 3 — Visualization
 
 Only if Phase 2 produced something worth looking at. Minimal candidate: `epi

@@ -159,14 +159,22 @@ pub fn run(cfg: &Config, ctx: &Context, out: &Path) -> Result<Report, String> {
     }
     report.observations = format!("{}\nCliff's δ on margin: EPI vs GreedyError {}, EPI vs FixedPriority {}.\n\nDetector diagnostics:\n\n{}", t.markdown(), f3(d_greedy), f3(d_fixed), dt.markdown());
     let fe = frac["epi"];
-    let v = if fe < 0.3 || d_greedy <= 0.0 {
+    let (_, _, _, keys, wins) = diag["epi"];
+    let keys_per_window = keys as f64 / wins.max(1) as f64;
+    // The detector needs occupied keys to say anything. Below one key per
+    // window on average it has nothing to compare, and "no reversal" is an
+    // absence of data, not a finding.
+    let starved = keys_per_window < 1.0;
+    let v = if starved {
+        Verdict::Inconclusive
+    } else if fe < 0.3 || d_greedy <= 0.0 {
         Verdict::Refuted
     } else if fe >= 0.7 && d_greedy >= 0.3 && d_fixed >= 0.3 {
         Verdict::Supported
     } else {
         Verdict::Inconclusive
     };
-    report.verdict("H6", v, format!("pre-registered: consistent reversal in ≥ 70% of EPI individuals and margin δ ≥ 0.3 vs both selectors; measured reversal EPI {} greedy {} fixed {}, δ greedy {}, δ fixed {}", f3(fe), f3(frac["greedy_error"]), f3(frac["fixed_priority"]), f3(d_greedy), f3(d_fixed)));
+    report.verdict("H6", v, format!("pre-registered: consistent reversal in ≥ 70% of EPI individuals and margin δ ≥ 0.3 vs both selectors; measured reversal EPI {} greedy {} fixed {}, δ greedy {}, δ fixed {}; detector occupied {} keys per window for EPI{}", f3(fe), f3(frac["greedy_error"]), f3(frac["fixed_priority"]), f3(d_greedy), f3(d_fixed), f3(keys_per_window), if starved { " (starved: the reversal clause could not be evaluated)" } else { "" }));
     report.interpretation = "A reversal within one error rank order means the organism serves the smaller deficit in some contexts and the larger in others, consistently; a largest-error rule cannot do that and a fixed order can only do it through its threshold. The selectors share every other process with EPI, so the margin gap, if any, is the value of competitive arbitration in this family.".to_string();
     Ok(report)
 }

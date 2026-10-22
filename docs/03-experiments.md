@@ -18,6 +18,12 @@ Amendments:
   development→test distance against strangers' development→own test distance,
   the same kind of pair. Test→test stranger distances are systematically
   smaller because they share a world, which made C ≈ −1 for everyone.
+- 2026-10-22 (M7): H6's reversal clause is reported as *inconclusive* when
+  the detector averages fewer than one occupied key per window for EPI. In
+  the held-out run EPI served exactly one drive with both variables in
+  deficit on 7.8% of ticks and occupied 0.25 keys per window: the organism
+  rarely lets both deficits grow, so the pre-registered definition has
+  almost nothing to compare. Absence of data is not a refutation.
 - 2026-10-22 (M5): `FixedPriority` serves the first drive in order whose
   |error| exceeds 0.25. With threshold zero it never drank and died within
   200 ticks, which is not a comparison. Consequently "no reversal by

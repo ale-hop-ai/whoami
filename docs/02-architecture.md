@@ -43,7 +43,9 @@ Out of scope for Phase 1: predators, other organisms, terrain, tools, cycles.
 
 ## 2. Body (physiology)
 
-Internal variables, each in [0,1], death when any leaves [0,1]:
+Internal variables, each in [0,1]. Energy and hydration saturate at 1 and are
+lethal at 0; body temperature is lethal at both ends (amendment M1: eating to
+death is not a failure mode worth modeling).
 
 | Var | Meaning | Decay per tick | Restored by |
 |-----|---------|----------------|-------------|

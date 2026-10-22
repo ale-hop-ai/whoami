@@ -1,5 +1,6 @@
 //! CLI. Hand-parsed; no framework.
 
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::exit;
 
@@ -51,6 +52,19 @@ fn parse(args: &[String]) -> Result<Args, String> {
         i += 2;
     }
     Ok(a)
+}
+
+/// Print a line; a closed pipe (e.g. `| head`) ends the program quietly.
+fn out(line: std::fmt::Arguments) {
+    let stdout = std::io::stdout();
+    let mut h = stdout.lock();
+    if h.write_fmt(line).and_then(|_| h.write_all(b"\n")).is_err() {
+        exit(0);
+    }
+}
+
+macro_rules! outln {
+    ($($arg:tt)*) => { out(format_args!($($arg)*)) };
 }
 
 fn main() {
@@ -132,25 +146,25 @@ fn cmd_metrics(args: &[String]) -> Result<(), String> {
     let tr = Trajectory::load(&path)?;
     let sp = &cfg.organism.homeostasis.setpoint;
     let wd = &cfg.organism.homeostasis.width;
-    println!("ticks_alive {}  death {:?}  regimes {}  dangers {}", tr.ticks_alive(), tr.death, tr.regimes.len(), tr.dangers.len());
+    outln!("ticks_alive {}  death {:?}  regimes {}  dangers {}", tr.ticks_alive(), tr.death, tr.regimes.len(), tr.dangers.len());
     let windows = tr.windows(a.window);
     let fps: Vec<Fingerprint> = windows.iter().map(|w| Fingerprint::from_rows(w)).collect();
     let refs: Vec<&Fingerprint> = fps.iter().collect();
     let weights = pooled_occupancy(&refs);
-    println!("{:>7} {:>6} {:>5} {:>18} {:>7} {:>7} {:>6} {:>6} {:>6} {:>8} {:>8}", "start", "margin", "viab", "operating_point", "intake", "mv/int", "antic", "H(a)", "H(a|b)", "d_prev", "floor");
+    outln!("{:>7} {:>6} {:>5} {:>18} {:>7} {:>7} {:>6} {:>6} {:>6} {:>8} {:>8}", "start", "margin", "viab", "operating_point", "intake", "mv/int", "antic", "H(a)", "H(a|b)", "d_prev", "floor");
     let mut prev_row: Option<&epi::metrics::Row> = None;
     for (i, w) in windows.iter().enumerate() {
         let st = window_stats(w, prev_row, sp, wd);
         let d_prev = if i > 0 { fingerprint_distance(&fps[i - 1], &fps[i], &weights) } else { 0.0 };
         let floor = split_half_floor(w, &weights);
-        println!("{:>7} {:>6.3} {:>5.2} {:>5.2} {:>5.2} {:>5.2} {:>7.4} {:>7.1} {:>6.2} {:>6.2} {:>6.2} {:>8.4} {:>8.4}",
+        outln!("{:>7} {:>6.3} {:>5.2} {:>5.2} {:>5.2} {:>5.2} {:>7.4} {:>7.1} {:>6.2} {:>6.2} {:>6.2} {:>8.4} {:>8.4}",
             st.start, st.margin, st.viability, st.operating_point[0], st.operating_point[1], st.operating_point[2],
             st.intake_per_tick, st.moves_per_intake, st.anticipation_rate, st.action_entropy, st.conditional_entropy, d_prev, floor);
         prev_row = w.last();
     }
     for (t, op) in &tr.regimes {
         let speed = adaptation_speed(&tr, *t, a.window, 0.9, 4000, sp, wd);
-        println!("regime {t} {op:?}: adaptation_speed {speed:?}");
+        outln!("regime {t} {op:?}: adaptation_speed {speed:?}");
     }
     Ok(())
 }
@@ -158,7 +172,7 @@ fn cmd_metrics(args: &[String]) -> Result<(), String> {
 fn write_summary(out: &Path, summary: serde_json::Value) -> Result<(), String> {
     let text = serde_json::to_string_pretty(&summary).map_err(|e| e.to_string())?;
     std::fs::write(out.join("result.json"), &text).map_err(|e| e.to_string())?;
-    println!("{text}");
+    outln!("{text}");
     Ok(())
 }
 
@@ -166,6 +180,6 @@ fn cmd_hash(args: &[String]) -> Result<(), String> {
     let a = parse(args)?;
     let (cfg, _) = load(&a)?;
     let r = epi::run_once(&cfg, a.agent, a.seed, a.ticks, None::<&Path>, 1)?;
-    println!("{} {}", r.trajectory_hash, r.ticks_alive);
+    outln!("{} {}", r.trajectory_hash, r.ticks_alive);
     Ok(())
 }

@@ -16,8 +16,10 @@ pub enum Event<'a> {
         action: Action,
         pos: (usize, usize),
         body: [f64; N_VARS],
-        /// Food and water visible on the current cell.
+        /// Food and water on the current cell.
         here: [f64; 2],
+        /// Food / water visible anywhere in the perception window.
+        vis: [bool; 2],
         #[serde(skip_serializing_if = "Option::is_none")]
         org: Option<&'a OrgTick>,
     },

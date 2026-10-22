@@ -18,6 +18,21 @@ pub struct RunResult {
     pub trajectory_hash: String,
 }
 
+/// Same window as Perception; computed here so every agent kind logs it.
+pub fn visible(world: &World, pos: (usize, usize)) -> [bool; 2] {
+    use crate::organism::perception::RADIUS;
+    let mut vis = [false; 2];
+    for dy in -RADIUS..=RADIUS {
+        for dx in -RADIUS..=RADIUS {
+            let (x, y) = world.wrap(pos.0, pos.1, dx, dy);
+            let c = world.cell(x, y);
+            vis[0] |= c.food > 0.05;
+            vis[1] |= c.water > 0.05;
+        }
+    }
+    vis
+}
+
 pub struct Streams {
     pub env: Rng,
     pub org: Rng,
@@ -48,14 +63,17 @@ pub fn run(world: &mut World, agent: &mut dyn Agent, streams: &mut Streams, tick
             hash.write_f64(x);
         }
         let cell = world.cell(body.pos.0, body.pos.1);
-        log.write(&Event::Tick {
-            t: world.tick,
-            action,
-            pos: body.pos,
-            body: body.v,
-            here: [cell.food, cell.water],
-            org: agent.org_tick(),
-        });
+        if log.tick_wanted(world.tick) {
+            log.write(&Event::Tick {
+                t: world.tick,
+                action,
+                pos: body.pos,
+                body: body.v,
+                here: [cell.food, cell.water],
+                vis: visible(world, body.pos),
+                org: agent.org_tick(),
+            });
+        }
         if body.alive {
             ticks_alive += 1;
         } else if let Some(cause) = body.cause_of_death {

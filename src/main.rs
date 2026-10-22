@@ -9,9 +9,10 @@ use epi::snapshot::Snapshot;
 use epi::{AgentKind, Session};
 
 const USAGE: &str = "usage:
-  epi run  [--config C] [--seed S] [--ticks T] [--out DIR] [--agent epi|random] [--log-every K] [--snapshot-every K]
+  epi run  [--config C] [--seed S] [--ticks T] [--out DIR] [--agent epi|random|oracle|mixed] [--log-every K] [--snapshot-every K]
   epi fork --snapshot FILE --env-seed S [--ticks T] [--out DIR] [--log-every K]
-  epi hash [--config C] [--seed S] [--ticks T] [--agent epi|random]";
+  epi metrics --log FILE [--config C] [--window W]
+  epi hash [--config C] [--seed S] [--ticks T] [--agent epi|random|oracle|mixed]";
 
 struct Args {
     config: Option<PathBuf>,
@@ -23,10 +24,12 @@ struct Args {
     snapshot_every: Option<u64>,
     snapshot: Option<PathBuf>,
     env_seed: Option<u64>,
+    log: Option<PathBuf>,
+    window: usize,
 }
 
 fn parse(args: &[String]) -> Result<Args, String> {
-    let mut a = Args { config: None, seed: 0, ticks: 20_000, out: None, agent: AgentKind::Epi, log_every: 1, snapshot_every: None, snapshot: None, env_seed: None };
+    let mut a = Args { config: None, seed: 0, ticks: 20_000, out: None, agent: AgentKind::Epi, log_every: 1, snapshot_every: None, snapshot: None, env_seed: None, log: None, window: 500 };
     let mut i = 0;
     while i < args.len() {
         let key = &args[i];
@@ -41,6 +44,8 @@ fn parse(args: &[String]) -> Result<Args, String> {
             "--snapshot-every" => a.snapshot_every = Some(val.parse().map_err(|_| format!("bad snapshot-every {val}"))?),
             "--snapshot" => a.snapshot = Some(PathBuf::from(val)),
             "--env-seed" => a.env_seed = Some(val.parse().map_err(|_| format!("bad env-seed {val}"))?),
+            "--log" => a.log = Some(PathBuf::from(val)),
+            "--window" => a.window = val.parse().map_err(|_| format!("bad window {val}"))?,
             other => return Err(format!("unknown flag {other}")),
         }
         i += 2;
@@ -58,6 +63,7 @@ fn main() {
         "run" => cmd_run(&argv[1..]),
         "fork" => cmd_fork(&argv[1..]),
         "hash" => cmd_hash(&argv[1..]),
+        "metrics" => cmd_metrics(&argv[1..]),
         _ => Err(USAGE.to_string()),
     };
     if let Err(e) = result {
@@ -116,6 +122,37 @@ fn cmd_fork(args: &[String]) -> Result<(), String> {
         "agent": "epi",
         "result": r,
     }))
+}
+
+fn cmd_metrics(args: &[String]) -> Result<(), String> {
+    use epi::metrics::{Fingerprint, fingerprint_distance, pooled_occupancy, split_half_floor, trajectory::{adaptation_speed, window_stats}, Trajectory};
+    let a = parse(args)?;
+    let (cfg, _) = load(&a)?;
+    let path = a.log.clone().ok_or("metrics needs --log FILE")?;
+    let tr = Trajectory::load(&path)?;
+    let sp = &cfg.organism.homeostasis.setpoint;
+    let wd = &cfg.organism.homeostasis.width;
+    println!("ticks_alive {}  death {:?}  regimes {}  dangers {}", tr.ticks_alive(), tr.death, tr.regimes.len(), tr.dangers.len());
+    let windows = tr.windows(a.window);
+    let fps: Vec<Fingerprint> = windows.iter().map(|w| Fingerprint::from_rows(w)).collect();
+    let refs: Vec<&Fingerprint> = fps.iter().collect();
+    let weights = pooled_occupancy(&refs);
+    println!("{:>7} {:>6} {:>5} {:>18} {:>7} {:>7} {:>6} {:>6} {:>6} {:>8} {:>8}", "start", "margin", "viab", "operating_point", "intake", "mv/int", "antic", "H(a)", "H(a|b)", "d_prev", "floor");
+    let mut prev_row: Option<&epi::metrics::Row> = None;
+    for (i, w) in windows.iter().enumerate() {
+        let st = window_stats(w, prev_row, sp, wd);
+        let d_prev = if i > 0 { fingerprint_distance(&fps[i - 1], &fps[i], &weights) } else { 0.0 };
+        let floor = split_half_floor(w, &weights);
+        println!("{:>7} {:>6.3} {:>5.2} {:>5.2} {:>5.2} {:>5.2} {:>7.4} {:>7.1} {:>6.2} {:>6.2} {:>6.2} {:>8.4} {:>8.4}",
+            st.start, st.margin, st.viability, st.operating_point[0], st.operating_point[1], st.operating_point[2],
+            st.intake_per_tick, st.moves_per_intake, st.anticipation_rate, st.action_entropy, st.conditional_entropy, d_prev, floor);
+        prev_row = w.last();
+    }
+    for (t, op) in &tr.regimes {
+        let speed = adaptation_speed(&tr, *t, a.window, 0.9, 4000, sp, wd);
+        println!("regime {t} {op:?}: adaptation_speed {speed:?}");
+    }
+    Ok(())
 }
 
 fn write_summary(out: &Path, summary: serde_json::Value) -> Result<(), String> {

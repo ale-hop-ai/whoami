@@ -7,6 +7,7 @@ pub mod env;
 pub mod experiment;
 pub mod hash;
 pub mod log;
+pub mod metrics;
 pub mod organism;
 pub mod rng;
 pub mod signals;
@@ -20,7 +21,7 @@ use std::path::PathBuf;
 use agent::Agent;
 use config::Config;
 use env::World;
-use experiment::baselines::RandomAgent;
+use experiment::baselines::{MixedForagerAgent, OracleAgent, RandomAgent};
 use hash::Fnv;
 use log::{Event, Logger};
 use organism::Organism;
@@ -33,6 +34,8 @@ use snapshot::Snapshot;
 pub enum AgentKind {
     Epi,
     Random,
+    Oracle,
+    MixedForager,
 }
 
 impl AgentKind {
@@ -40,7 +43,9 @@ impl AgentKind {
         match s {
             "epi" => Ok(AgentKind::Epi),
             "random" => Ok(AgentKind::Random),
-            other => Err(format!("unknown agent '{other}' (expected: epi, random)")),
+            "oracle" => Ok(AgentKind::Oracle),
+            "mixed" => Ok(AgentKind::MixedForager),
+            other => Err(format!("unknown agent '{other}' (expected: epi, random, oracle, mixed)")),
         }
     }
 }
@@ -55,6 +60,8 @@ pub fn build_agent(kind: AgentKind, cfg: &Config, w: &World) -> Box<dyn Agent> {
     match kind {
         AgentKind::Epi => Box::new(organism::Organism::new(cfg.organism.clone(), cfg.body.clone(), w, pos)),
         AgentKind::Random => Box::new(RandomAgent::new(cfg.body.clone(), pos)),
+        AgentKind::Oracle => Box::new(OracleAgent::new(cfg.body.clone(), pos)),
+        AgentKind::MixedForager => Box::new(MixedForagerAgent::new(cfg.body.clone(), pos)),
     }
 }
 

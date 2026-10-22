@@ -18,6 +18,14 @@ Amendments:
   development→test distance against strangers' development→own test distance,
   the same kind of pair. Test→test stranger distances are systematically
   smaller because they share a world, which made C ≈ −1 for everyone.
+- 2026-10-22 (M7, post-run): the individuality index `I` (occupancy-weighted
+  one-way ICC over 756 bin×action cells) reaches only 0.088 for a planted
+  parameter difference that leave-one-out classification separates at 98.5%
+  (`docs/results/e2check-report.md`). The 0.3 threshold is unreachable by
+  this statistic. H2's I clause is recorded as untested in the held-out run;
+  any re-registration must use identification accuracy or pairwise
+  own-vs-stranger distance, calibrated on the planted cohorts. This
+  amendment does not change the reported verdicts.
 - 2026-10-22 (M7): H6's reversal clause is reported as *inconclusive* when
   the detector averages fewer than one occupied key per window for EPI. In
   the held-out run EPI served exactly one drive with both variables in

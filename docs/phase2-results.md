@@ -12,7 +12,7 @@ pre-registered in `03-experiments.md`, including its dated amendments.
 |------------|---------|-------------------------------------|
 | H1 emergent adaptive behavior, `default` | **supported** | δ vs Reactive: margin 0.996, intake 0.996, survival 0.991 (≥ 0.5, ≥ 0.5, ≥ −0.1) |
 | H1, `volatile` | **supported** | margin 0.980, intake 0.980, survival 0.971 |
-| H2 individuality from history | **refuted** | within-family I − I_null 0.034 (≥ 0.3); PV(5W) > 0 for 53% (≥ 80%); Frozen 0 by construction |
+| H2 individuality from history | **refuted on PV; untested on I** | within-family I − I_null 0.034 (≥ 0.3, but see sensitivity check: the index tops out near 0.09 for a planted parameter difference); PV(5W) > 0 for 53% (≥ 80%); Frozen 0 by construction |
 | H3 continuity | inconclusive (conditional on H2) | median C(W) 0.038, C(5W) 0.023, own past closest 3% |
 | H4 fork kinship | inconclusive | K(W) 0.49 (< 0.9 ✓), early K < 0.7 ✓, below body-only at every window ✗, sign test p 0.17 (< 0.05 ✗) |
 | H5 memory | inconclusive | primary deficit δ 1.00 ✓; not specific: every metric collapses |
@@ -22,8 +22,18 @@ pre-registered in `03-experiments.md`, including its dated amendments.
 | H5 drive adaptation | **refuted** | intact I − I_null 0.034 vs lesioned −0.007: no individuality to lose |
 | H6 context-dependent priorities | inconclusive | reversal detector starved (0.25 occupied keys per window); margin δ vs GreedyError 1.00, vs FixedPriority 1.00 |
 
-Per `03-experiments.md` §7 the H2 refutation is a stop condition: Phase 4 is
-not justified as "more of the same". See §4.
+**Sensitivity check (`docs/results/e2check-report.md`).** Two cohorts with
+deliberately different drive parameters (γ 0.85 vs 0.97, no anticipation, no
+drive persistence) went through the E2 protocol. Leave-one-out classification
+separates them with 98.5% accuracy; the one-way ICC index reaches only
+0.088 against a null of 0.002. The pre-registered I threshold of 0.3 is
+therefore not reachable by the index as defined (occupancy-weighted average
+over 756 bin×action cells, most of them near-empty in a 500-tick window),
+and H2's I clause is untested. The PV clause is the sensitive one and it
+fails (53% against 80%). H2 stands refuted on predictive validity only.
+
+Per `03-experiments.md` §7 that is still a stop condition for Phase 4 as
+planned. See §5.
 
 ## 2. Observations
 
@@ -113,10 +123,14 @@ credited to the organism.
 Phase 4 as planned ("richer environments, learned representations") is not
 justified by these results. What the results justify instead, in order:
 
-1. A measurement check before any mechanism work: is the individuality
-   metric able to detect individuality that is known to exist? Plant it
-   (two parameter sets, or two frozen organisms) and confirm `I − I_null`
-   responds. If the metric is blind, H2's refutation is uninformative.
+1. Done: the metric check above. Consequence for any further H2 work: the
+   individuality clause must be re-registered on a sensitive statistic
+   (leave-one-out identification accuracy, or pairwise own-vs-stranger
+   distance), with its threshold calibrated on the planted-difference
+   cohorts (98.5% there; chance 50%). In E2 proper, family classification
+   reached 47% against 25% chance, so development *family* already leaves a
+   detectable trace; individual history within a family is the open
+   question.
 2. A lesion of time-to-critical alone, to unconfound the self-model result.
 3. Only then, one mechanism experiment aimed at H2: a positive-feedback
    carrier with a time constant inside the run (the habit term at

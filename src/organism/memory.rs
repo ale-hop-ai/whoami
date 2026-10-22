@@ -23,6 +23,8 @@ pub struct MemoryParams {
     pub consolidate_conf: f64,
     /// A cell counts as a remembered target when conf * estimate exceeds this.
     pub target_threshold: f64,
+    /// Distance discount when choosing the target: argmax conf·estimate·γ^dist.
+    pub target_gamma: f64,
 }
 
 impl Default for MemoryParams {
@@ -35,6 +37,7 @@ impl Default for MemoryParams {
             consolidate_every: 500,
             consolidate_conf: 0.5,
             target_threshold: 0.05,
+            target_gamma: 0.9,
         }
     }
 }
@@ -143,22 +146,29 @@ impl Memory {
     }
 
     fn outputs(&self, obs: &Observation, p: &MemoryParams) -> MemoryOut {
-        // Nearest remembered target per resource, excluding the current cell.
+        // Best remembered target per resource: highest conf·estimate·γ^dist
+        // (amendment 2026-10-22: the nearest qualifying cell kept the organism
+        // grazing a patch's edge and never valuing its centre).
         let mut remembered = [Remembered::default(); N_RESOURCES];
         for r in 0..N_RESOURCES {
-            let mut best: Option<(usize, usize, usize)> = None; // (dist, x, y)
+            let mut best: Option<(f64, usize, usize, usize)> = None; // (score, dist, x, y)
             for i in 0..self.estimate.len() {
-                if self.conf[i][r] * self.estimate[i][r] < p.target_threshold {
+                let worth = self.conf[i][r] * self.estimate[i][r];
+                if worth < p.target_threshold {
                     continue;
                 }
                 let x = i % self.width;
                 let y = i / self.width;
                 let d = self.distance(obs.pos, (x, y));
-                if best.is_none_or(|b| d < b.0) {
-                    best = Some((d, x, y));
+                let mut score = worth;
+                for _ in 0..d {
+                    score *= p.target_gamma;
+                }
+                if best.is_none_or(|b| score > b.0) {
+                    best = Some((score, d, x, y));
                 }
             }
-            if let Some((d, x, y)) = best {
+            if let Some((_, d, x, y)) = best {
                 let i = self.idx(x, y);
                 let mut toward = [false; 4];
                 for (k, m) in MOVES.iter().enumerate() {

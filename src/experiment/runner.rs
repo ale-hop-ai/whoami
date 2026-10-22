@@ -225,15 +225,16 @@ impl Acc {
     }
 }
 
-/// Memory retention from the logged remembered targets. A target the
-/// organism has pointed at for at least `K` ticks is checked when the
-/// organism stands on it: does the cell hold at least half of what memory
-/// said when the target was first adopted? Retention is the fraction of
-/// such arrivals that do. None when no long-held target was ever reached.
+/// Memory retention from the logged remembered targets. When the organism
+/// adopts a target outside its perception window (distance ≥ 3) the amount
+/// memory claims is recorded; if it then walks to that same target, the
+/// arrival is checked: does the cell hold at least half the remembered
+/// amount? Retention is the fraction of such arrivals that do. None when no
+/// out-of-sight target was ever reached. (docs/03 §1, amendment 2026-10-22)
 pub fn retention(tr: &Trajectory) -> Option<f64> {
-    const K: u64 = 200;
-    // Per resource: (target, tick adopted, amount remembered then).
-    type Held = Option<((usize, usize), u64, f64)>;
+    const OUT_OF_SIGHT: usize = 3;
+    // Per resource: (target, amount remembered when adopted).
+    type Held = Option<((usize, usize), f64)>;
     let mut held: [Held; 2] = [None, None];
     let mut checked = 0usize;
     let mut ok = 0usize;
@@ -246,8 +247,8 @@ pub fn retention(tr: &Trajectory) -> Option<f64> {
                 continue;
             }
             match held[res] {
-                Some((target, since, recorded)) if target == (x, y) => {
-                    if dist == 0 && r.t - since >= K {
+                Some((target, recorded)) if target == (x, y) => {
+                    if dist == 0 {
                         checked += 1;
                         if r.here[res] >= 0.5 * recorded {
                             ok += 1;
@@ -255,7 +256,7 @@ pub fn retention(tr: &Trajectory) -> Option<f64> {
                         held[res] = None;
                     }
                 }
-                _ => held[res] = Some(((x, y), r.t, amount)),
+                _ => held[res] = if dist >= OUT_OF_SIGHT { Some(((x, y), amount)) } else { None },
             }
         }
     }

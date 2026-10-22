@@ -12,7 +12,7 @@ use epi::{AgentKind, Session};
 const USAGE: &str = "usage:
   epi run  [--config C] [--seed S] [--ticks T] [--out DIR] [--agent epi|random|reactive|oracle|mixed] [--log-every K] [--snapshot-every K]
   epi fork --snapshot FILE --env-seed S [--ticks T] [--out DIR] [--log-every K]
-  epi experiment --name e1 [--config C] [--out DIR] [--seeds N] [--ticks T] [--window W]
+  epi experiment --name e1|e2|e3|e4|e5 [--config C] [--out DIR] [--seeds N] [--ticks T] [--window W]
   epi metrics --log FILE [--config C] [--window W]
   epi defaults
   epi hash [--config C] [--seed S] [--ticks T] [--agent epi|random|reactive|oracle|mixed]";

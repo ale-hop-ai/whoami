@@ -92,7 +92,10 @@ pub struct Signals {
     pub predicted: [[f64; N_VARS]; N_ACTIONS],  // WorldModel: Δ̂[action][var]
     pub uncertainty: [f64; N_ACTIONS],          // WorldModel
     pub prediction_error: f64,                  // WorldModel
-    pub at_remembered: [f64; N_RESOURCES],      // WorldModel: predicted gain of consuming at remembered_prev
+    pub here: [f64; N_RESOURCES],               // Perception: cell amounts
+    pub yield_: [f64; N_RESOURCES],             // SelfModel: gain per unit consumed
+    pub novel_remembered: [bool; N_RESOURCES],  // SelfModel
+    pub novel_here: [bool; N_RESOURCES],        // SelfModel
     pub remembered: [Remembered; N_RESOURCES],  // Memory (current tick)
     pub remembered_prev: [Remembered; N_RESOURCES], // Memory (previous tick; SelfModel reads this)
     pub neighbor_conf: [f64; 4],                // Memory, per move direction
@@ -120,14 +123,13 @@ impl WinnerTakeAll {
 }
 
 // organism/lesion.rs
-pub enum Lesion { Intact, Null, Shuffled { buffer_len: usize, warmup: usize }, Deleted }
+pub enum Lesion { Intact, Null, Deleted }   // Shuffled dropped at M6: no hypothesis uses it
 pub struct Lesions {
     pub memory: Lesion, pub world_model: Lesion, pub self_model: Lesion,
     pub exploration: Lesion, pub drive_adaptation: bool,   // bool: not an output
 }
-// Null outputs are the ones in 03-experiments H5. `Shuffled` keeps a ring of
-// real outputs (snapshot state) and emits Intact until `warmup` entries exist.
-// `Deleted` skips the process step entirely (deletion arm).
+// Null outputs are the ones in 03-experiments H5. `Deleted` skips the process
+// step entirely (deletion arm).
 
 // Agent trait — organism and baselines share one shape.
 pub trait Agent {

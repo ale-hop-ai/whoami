@@ -81,7 +81,8 @@
       "relax": 0.002,
       "consolidate_every": 500,
       "consolidate_conf": 0.5,
-      "target_threshold": 0.05
+      "target_threshold": 0.05,
+      "target_gamma": 0.9
     },
     "world_model": {
       "lr": 0.5,
@@ -91,7 +92,9 @@
     "self_model": {
       "drift_rate": 0.02,
       "drift_eps": 0.0001,
-      "t_max": 20000.0
+      "t_max": 20000.0,
+      "yield_rate": 0.3,
+      "novelty_ratio": 2.0
     },
     "drives": {
       "gain_eta": 0.2,
@@ -109,10 +112,12 @@
       "explore_scale": 0.2,
       "explore_unknown": 0.3,
       "explore_uncertainty": 0.5,
-      "seek_unknown": 0.05
+      "seek_unknown": 0.05,
+      "explore_novel": 2.0
     },
     "arbitration": {
-      "persistence": 0.002
+      "persistence": 0.002,
+      "drive_persistence": 0.5
     },
     "lesions": {
       "memory": "Intact",

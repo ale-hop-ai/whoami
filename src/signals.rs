@@ -33,9 +33,15 @@ pub struct Signals {
     pub predicted: [[f64; N_VARS]; N_ACTIONS],     // WorldModel: Δ̂[action][var]
     pub uncertainty: [f64; N_ACTIONS],             // WorldModel
     pub prediction_error: f64,                     // WorldModel
-    /// Predicted gain of Eat (food) / Drink (water) at the previous tick's
-    /// remembered target for each resource. 0 when nothing is remembered.
-    pub at_remembered: [f64; N_RESOURCES],         // WorldModel
+    /// Food and water on the current cell.
+    pub here: [f64; N_RESOURCES],                  // Perception
+    /// Learned gain per unit of resource consumed (a body capability).
+    pub yield_: [f64; N_RESOURCES],                // SelfModel
+    /// The remembered amount is beyond anything ever consumed at: the price
+    /// is an extrapolation and Exploration treats the target as novel (F2).
+    pub novel_remembered: [bool; N_RESOURCES],     // SelfModel
+    /// The amount on the current cell is beyond anything ever consumed at.
+    pub novel_here: [bool; N_RESOURCES],           // SelfModel
     pub remembered: [Remembered; N_RESOURCES],     // Memory, this tick
     pub remembered_prev: [Remembered; N_RESOURCES],// Memory, previous tick (SelfModel reads this)
     pub neighbor_conf: [f64; 4],                   // Memory, per move direction
@@ -57,7 +63,8 @@ impl Signals {
             all.extend(self.neighbor_conf);
             all.extend(self.ttc);
             all.extend(self.reach);
-            all.extend(self.at_remembered);
+            all.extend(self.yield_);
+            all.extend(self.here);
             all.extend(self.urgency_prev);
             for x in all {
                 assert!(x.is_finite(), "non-finite value in Signals");

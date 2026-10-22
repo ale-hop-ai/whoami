@@ -2,7 +2,12 @@
 
 pub mod baselines;
 pub mod e1;
+pub mod e2;
+pub mod e3;
+pub mod e4;
+pub mod e5;
 pub mod families;
+pub mod protocols;
 pub mod report;
 pub mod runner;
 
@@ -11,7 +16,7 @@ use std::path::Path;
 use crate::config::Config;
 use crate::experiment::families::Family;
 use crate::experiment::report::Report;
-use crate::experiment::runner::{Arm, ArmKind, RunOpts, SeedResult, run_seed};
+use crate::experiment::runner::{Arm, RunOpts, SeedResult, run_seed};
 use crate::metrics::median;
 use crate::organism::Organism;
 use crate::AgentKind;
@@ -90,7 +95,11 @@ pub fn run_named(name: &str, cfg: &Config, ctx: &Context, out: &Path) -> Result<
     std::fs::create_dir_all(out).map_err(|e| format!("mkdir {}: {e}", out.display()))?;
     let report = match name {
         "e1" => e1::run(cfg, ctx, out)?,
-        other => return Err(format!("unknown experiment '{other}' (have: e1)")),
+        "e2" => e2::run(cfg, ctx, out)?,
+        "e3" => e3::run(cfg, ctx, out)?,
+        "e4" => e4::run(cfg, ctx, out)?,
+        "e5" => e5::run(cfg, ctx, out)?,
+        other => return Err(format!("unknown experiment '{other}' (have: e1..e5)")),
     };
     std::fs::write(out.join("report.md"), report.markdown()).map_err(|e| e.to_string())?;
     Ok(report)
@@ -106,5 +115,3 @@ pub fn git_commit() -> String {
         .unwrap_or_else(|| "unknown".into())
 }
 
-#[allow(dead_code)]
-fn _arm_kind_is_used(_: ArmKind) {}

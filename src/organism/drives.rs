@@ -7,10 +7,8 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::body::{ACTIONS, N_ACTIONS};
+use crate::body::{ACTIONS, Action, N_ACTIONS};
 use crate::signals::{EXPLORE, N_DRIVES, Signals};
-#[cfg(test)]
-use crate::body::Action;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(default)]
@@ -36,6 +34,9 @@ pub struct DriveParams {
     /// F2 for a homeostatic drive with no remembered target: value of moving
     /// toward the least-known neighbor, scaled by that drive's own urgency.
     pub seek_unknown: f64,
+    /// F2, novelty: Exploration values moving toward a remembered cell whose
+    /// amount lies outside the world model's training range.
+    pub explore_novel: f64,
 }
 
 impl Default for DriveParams {
@@ -52,6 +53,7 @@ impl Default for DriveParams {
             explore_unknown: 0.3,
             explore_uncertainty: 0.5,
             seek_unknown: 0.05,
+            explore_novel: 2.0,
         }
     }
 }
@@ -144,24 +146,49 @@ impl Drives {
             for d in 0..3 {
                 values[d][ai] = s.predicted[ai][d];
             }
+            // Consumption is priced by the self-model's yield per unit times
+            // what is on the cell (amendment 2026-10-22: the linear world
+            // model could not identify consumption gains from few samples).
+            match a {
+                Action::Eat => values[0][ai] = s.yield_[0] * s.here[0],
+                Action::Drink => values[1][ai] = s.yield_[1] * s.here[1],
+                _ => {}
+            }
             if a.is_move() {
                 // F1: value of moving toward a remembered resource, priced by
-                // the world model's predicted gain of consuming there.
+                // yield per unit times the remembered amount.
                 for r in 0..2 {
                     let rem = &s.remembered[r];
                     if rem.conf > 0.0 {
                         if rem.toward[ai] {
-                            values[r][ai] = rem.conf * s.at_remembered[r] * pow_int(p.gamma, rem.dist);
+                            values[r][ai] = rem.conf * s.yield_[r] * rem.amounts[r] * pow_int(p.gamma, rem.dist);
                         }
                     } else {
                         // F2 for a drive that has lost its target: seek the unknown.
                         values[r][ai] = p.seek_unknown * (1.0 - s.neighbor_conf[ai]);
                     }
                 }
-                // F2: explore toward unknown cells.
+                // F2: explore toward unknown cells, and toward remembered
+                // cells whose value the model can only extrapolate.
                 values[EXPLORE][ai] = p.explore_unknown * (1.0 - s.neighbor_conf[ai]);
+                for r in 0..2 {
+                    let rem = &s.remembered[r];
+                    if s.novel_remembered[r] && rem.conf > 0.0 && rem.toward[ai] {
+                        values[EXPLORE][ai] += p.explore_novel * rem.conf * pow_int(p.gamma, rem.dist);
+                    }
+                }
             }
             values[EXPLORE][ai] += p.explore_uncertainty * s.uncertainty[ai] / (mean_unc + 1e-12);
+            // Standing on a cell whose amount is beyond the model's training
+            // range: the novelty is resolved by consuming here, and that
+            // outranks any pull toward another novel cell (which is at best
+            // explore_novel · conf · γ^dist < explore_novel).
+            for r in 0..2 {
+                let consume = if r == 0 { Action::Eat } else { Action::Drink };
+                if a == consume && s.novel_here[r] {
+                    values[EXPLORE][ai] += 2.0 * p.explore_novel;
+                }
+            }
             if !explore {
                 values[EXPLORE][ai] = 0.0;
             }
@@ -210,19 +237,23 @@ mod tests {
             neighbor_conf: [0.0; 4],
             ttc: [1000.0; 3],
             reach: [20_000.0; 2],
-            at_remembered: [0.15; 2],
+            here: [0.0; 2],
+            yield_: [0.6; 2],
+            novel_remembered: [false; 2],
+            novel_here: [false; 2],
             urgency_prev: [0.0; N_DRIVES],
         }
     }
 
     #[test]
-    fn hungry_drive_bids_for_predicted_energy_gain() {
+    fn hungry_drive_bids_to_eat_what_is_here() {
         let p = DriveParams::default();
         let mut d = Drives::default();
         let mut s = signals();
-        s.predicted[Action::Eat.index()][0] = 0.1;
+        s.here = [0.25, 0.0];
         let out = d.step(&s, &p, true, true);
         assert!(out.bids[0][Action::Eat.index()] > out.bids[0][Action::Rest.index()]);
+        assert_eq!(out.bids[0][Action::Drink.index()], 0.0);
     }
 
     #[test]
@@ -256,7 +287,7 @@ mod tests {
         let p = DriveParams::default();
         let mut d = Drives::default();
         let mut s = signals();
-        s.predicted[Action::Eat.index()][0] = 0.1;
+        s.here = [0.25, 0.0];
         d.step(&s, &p, true, true);
         s.prev_action = Some(Action::Eat);
         s.errors[0] = 0.6; // got worse

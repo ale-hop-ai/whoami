@@ -6,7 +6,6 @@ use serde::{Deserialize, Serialize};
 
 use crate::body::{ACTIONS, Action, Deltas, N_ACTIONS, N_VARS};
 use crate::organism::perception::Observation;
-use crate::signals::{N_RESOURCES, Remembered};
 
 pub const N_FEAT: usize = 7;
 
@@ -36,12 +35,11 @@ pub struct WorldModelOut {
     pub predicted: [[f64; N_VARS]; N_ACTIONS],
     pub uncertainty: [f64; N_ACTIONS],
     pub prediction_error: f64,
-    pub at_remembered: [f64; N_RESOURCES],
 }
 
 impl WorldModelOut {
     pub fn null(p: &WorldModelParams) -> WorldModelOut {
-        WorldModelOut { predicted: [[0.0; N_VARS]; N_ACTIONS], uncertainty: [p.uncertainty_init; N_ACTIONS], prediction_error: 0.0, at_remembered: [0.0; N_RESOURCES] }
+        WorldModelOut { predicted: [[0.0; N_VARS]; N_ACTIONS], uncertainty: [p.uncertainty_init; N_ACTIONS], prediction_error: 0.0 }
     }
 }
 
@@ -72,9 +70,8 @@ impl WorldModel {
     }
 
     /// Learn from the previous (features, action, realized deltas), then
-    /// predict for every action from the current observation, and for
-    /// consuming at the remembered targets (ambient taken from the current cell).
-    pub fn step(&mut self, obs: &Observation, deltas: &Deltas, prev_action: Option<Action>, remembered: &[Remembered; N_RESOURCES], p: &WorldModelParams) -> WorldModelOut {
+    /// predict for every action from the current observation.
+    pub fn step(&mut self, obs: &Observation, deltas: &Deltas, prev_action: Option<Action>, p: &WorldModelParams) -> WorldModelOut {
         let mut prediction_error = 0.0;
         if let (Some(phis), Some(a)) = (self.phis, prev_action) {
             let phi = phis[a.index()];
@@ -101,16 +98,7 @@ impl WorldModel {
             phis[a.index()] = phi;
         }
         self.phis = Some(phis);
-        let mut at_remembered = [0.0; N_RESOURCES];
-        let (cr, cc) = Observation::center();
-        for (r, rem) in remembered.iter().enumerate() {
-            if rem.conf > 0.0 {
-                let phi = [1.0, rem.amounts[0], rem.amounts[1], obs.ambient01[cr][cc], obs.v[0], obs.v[1], obs.v[2]];
-                let (a, d) = if r == 0 { (Action::Eat, 0) } else { (Action::Drink, 1) };
-                at_remembered[r] = self.predict_one(a, &phi)[d];
-            }
-        }
-        WorldModelOut { predicted, uncertainty: self.uncertainty, prediction_error, at_remembered }
+        WorldModelOut { predicted, uncertainty: self.uncertainty, prediction_error }
     }
 }
 
@@ -138,15 +126,12 @@ mod tests {
         let p = WorldModelParams::default();
         let mut wm = WorldModel::new(&p);
         let o = obs(1.0);
-        wm.step(&o, &Deltas::default(), None, &[Remembered::default(); 2], &p);
+        wm.step(&o, &Deltas::default(), None, &p);
         for _ in 0..200 {
-            wm.step(&o, &Deltas([0.15, -0.003, 0.0]), Some(Action::Eat), &[Remembered::default(); 2], &p);
+            wm.step(&o, &Deltas([0.15, -0.003, 0.0]), Some(Action::Eat), &p);
         }
-        let rem = [Remembered { target: (3, 3), dist: 5, conf: 1.0, amounts: [1.0, 0.0], toward: [false; 4] }, Remembered::default()];
-        let out = wm.step(&o, &Deltas([0.15, -0.003, 0.0]), Some(Action::Eat), &rem, &p);
+        let out = wm.step(&o, &Deltas([0.15, -0.003, 0.0]), Some(Action::Eat), &p);
         assert!(out.predicted[Action::Eat.index()][0] > 0.1);
-        assert!(out.at_remembered[0] > 0.1);
-        assert_eq!(out.at_remembered[1], 0.0);
         assert!(out.predicted[Action::Rest.index()][0].abs() < 0.05);
         assert!(out.uncertainty[Action::Eat.index()] < p.uncertainty_init);
     }

@@ -9,6 +9,15 @@ Amendments:
   run horizon with dead ticks counted as 0, so an early death cannot raise
   them (survivorship control; found when Reactive's short life out-scored
   EPI on raw margin). Anticipation and entropies remain over ticks alive.
+- 2026-10-22 (M5): predictive validity's null is a stranger's window of the
+  same age and size (mean over strangers), not the pooled leave-one-out
+  population. The pooled model has 30× the data; with Dirichlet smoothing the
+  comparison measured data volume, not identity (PV ≈ −150 nats for every
+  individual in a smoke run).
+- 2026-10-22 (M5): continuity across the transplant compares own
+  development→test distance against strangers' development→own test distance,
+  the same kind of pair. Test→test stranger distances are systematically
+  smaller because they share a world, which made C ≈ −1 for everyone.
 - 2026-10-22 (M5): `FixedPriority` serves the first drive in order whose
   |error| exceeds 0.25. With threshold zero it never drank and died within
   200 ticks, which is not a comparison. Consequently "no reversal by
@@ -33,7 +42,7 @@ metrics; survival is secondary** and analyzed with censoring.
 | Adaptation speed `A` | ticks after a regime shift until rolling `V` returns to 90% of its pre-shift mean (censored at next shift) |
 | Prediction accuracy | MSE between the **logged** `Δ̂` and realized deltas (post-lesion signal) |
 | Behavioral diversity | entropy of action distribution per window; conditional entropy given state bin |
-| Memory retention | fraction of **logged** `Remembered` targets that, k=200 ticks after last observation, still point to a cell holding ≥ half the remembered value |
+| Memory retention | among arrivals at a remembered target that was adopted from outside the perception window (distance ≥ 3), the fraction where the cell holds ≥ half the amount memory claimed at adoption (amended: the 200-tick hold rule never fired because the nearest target changes as the organism moves) |
 | Anticipation rate | fraction of Eat/Drink taken while `|e_d| < 0.5` |
 | Strategy occupancy | fraction of ticks in food patch / water patch / mixed zone |
 
@@ -72,10 +81,10 @@ Derived quantities:
   H3 is therefore conditional on H2.
 - **Fork kinship** `K(t)` = `d(A_t, B_t) / d̄(A_t, stranger_t)`.
 - **Predictive validity** `PV(Δ)`: log-likelihood of an individual's actions in
-  window t+Δ under its own smoothed fingerprint from window t, minus
-  log-likelihood under the **leave-one-out** population fingerprint. Reported
-  at `Δ = W` and `Δ = 5W`; the `5W` value is the one tested (short-lag
-  autocorrelation inflates `Δ = W`).
+  window t+Δ under its own smoothed fingerprint from window t, minus the mean
+  log-likelihood under each **stranger's** fingerprint from window t (same
+  age, same data size; amended). Reported at `Δ = W` and `Δ = 5W`; the `5W`
+  value is the one tested (short-lag autocorrelation inflates `Δ = W`).
 
 ## 3. Baselines
 

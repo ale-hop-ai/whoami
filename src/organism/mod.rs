@@ -58,6 +58,9 @@ pub struct Organism {
     prev_action: Option<Action>,
     remembered_prev: [Remembered; N_RESOURCES],
     urgency_prev: [f64; N_DRIVES],
+    /// Cell amounts before the previous action (teaches the yield).
+    #[serde(default)]
+    here_prev: [f64; N_RESOURCES],
     /// Learning switch used by the Frozen baseline.
     learning: bool,
     /// Baseline selectors replace Drives+Arbitration; Competitive is EPI.
@@ -76,11 +79,12 @@ impl Organism {
             world_model: WorldModel::new(&params.world_model),
             self_model: SelfModel::new(&params.self_model),
             drives: Drives::default(),
-            arbitration: WinnerTakeAll,
+            arbitration: WinnerTakeAll::default(),
             deltas_prev: Deltas::default(),
             prev_action: None,
             remembered_prev: [Remembered::default(); N_RESOURCES],
             urgency_prev: [0.0; N_DRIVES],
+            here_prev: [0.0; N_RESOURCES],
             learning: true,
             selector: Selector::Competitive,
             last: OrgTick::default(),
@@ -113,6 +117,7 @@ impl Organism {
         self.prev_action = None;
         self.remembered_prev = [Remembered::default(); N_RESOURCES];
         self.urgency_prev = [0.0; N_DRIVES];
+        self.here_prev = [0.0; N_RESOURCES];
     }
 
     /// A fresh organism that inherits only `donor`'s body and position.
@@ -146,11 +151,13 @@ impl Organism {
 
         // 2. Perception.
         let obs = self.perception.observe(world, &self.body, self.prev_action);
+        let (cr, cc) = perception::Observation::center();
+        let here = [obs.food[cr][cc], obs.water[cr][cc]];
 
         // 3. World model: learn from the previous tick, predict for this one.
         let wm_params = if self.learning { p.world_model.clone() } else { WorldModelParams { lr: 0.0, uncertainty_rate: 0.0, ..p.world_model.clone() } };
         let wm = if les.world_model.runs() {
-            let out = self.world_model.step(&obs, &self.deltas_prev, self.prev_action, &self.remembered_prev, &wm_params);
+            let out = self.world_model.step(&obs, &self.deltas_prev, self.prev_action, &wm_params);
             if les.world_model.passes() { out } else { WorldModelOut::null(&p.world_model) }
         } else {
             WorldModelOut::null(&p.world_model)
@@ -158,7 +165,7 @@ impl Organism {
 
         // 4. Self-model.
         let sm = if les.self_model.runs() {
-            let out = self.self_model.step(&self.body.v, &self.deltas_prev, &self.remembered_prev, &p.homeostasis.danger_lo, &p.self_model);
+            let out = self.self_model.step(&self.body.v, &self.deltas_prev, self.prev_action, &self.here_prev, &here, &self.remembered_prev, &p.homeostasis.danger_lo, &p.self_model);
             if les.self_model.passes() { out } else { SelfModel::null_out(&p.self_model) }
         } else {
             SelfModel::null_out(&p.self_model)
@@ -184,7 +191,10 @@ impl Organism {
             predicted: wm.predicted,
             uncertainty: wm.uncertainty,
             prediction_error: wm.prediction_error,
-            at_remembered: wm.at_remembered,
+            here,
+            yield_: sm.yield_,
+            novel_remembered: sm.novel_remembered,
+            novel_here: sm.novel_here,
             remembered: mem.remembered,
             remembered_prev: self.remembered_prev,
             neighbor_conf: mem.neighbor_conf,
@@ -222,6 +232,7 @@ impl Organism {
         self.prev_action = Some(action);
         self.remembered_prev = mem.remembered;
         self.urgency_prev = dr.urgency;
+        self.here_prev = here;
         self.last = OrgTick {
             errors: ho.errors,
             bids: bids.to_vec(),

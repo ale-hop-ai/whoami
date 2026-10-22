@@ -36,10 +36,14 @@ impl Family {
                 w.regrowth *= 0.7;
             }
             Family::Far => {
-                // Patches at opposite corners and in opposite temperature
-                // zones; the commute is as long as the torus allows.
-                w.food_center = (1, 1);
-                w.water_center = (14, 14);
+                // Patches toward opposite corners and in opposite temperature
+                // zones: the commute is twice the default (18 cells centre to
+                // centre), and both patches are 10 cells from the start.
+                // Corner placement (1,1)/(14,14) was tried first and killed
+                // 60% of organisms before any learning; that is not a
+                // competing-priorities test, it is a lottery.
+                w.food_center = (3, 3);
+                w.water_center = (12, 12);
                 w.spread_food_center = (3, 8);
                 w.spread_water_center = (12, 8);
                 w.regime_ops = vec![RegimeOp::SwapPatches, RegimeOp::RotateGradient, RegimeOp::Scarcity];

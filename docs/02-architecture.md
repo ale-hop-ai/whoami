@@ -28,10 +28,12 @@ it, not to wait for regrowth. The schedule is deterministic given the seed and
 logged.
 
 **Environment families.** A family is a named set of generator parameters
-(patch size, gradient strength, regrowth rate, regime op set). Phase 1 defines
-four: `default`, `scarce`, `far` (patches at opposite corners, used by E5),
-`volatile` (regime every 2000 ticks). Seeds 0–99 per family are development,
-100+ held-out.
+(patch size, gradient strength, regrowth rate, regime op set). Phase 2 defines
+four: `default`; `scarce` (caps and regrowth reduced); `far` (patch centres
+at (3,3) and (12,12), both ten cells from the start, commute twice the
+default; corner placement was tried first and killed 60% of organisms before
+any learning, which tests luck, not priorities); `volatile` (regime every
+2000 ticks). Seeds 0–99 per family are development, 100+ held-out.
 
 **Degenerate optima (required, critique A5).** The `default` geometry must
 admit two strategies with similar payoff: *commute* (shuttle between patches)
@@ -88,9 +90,11 @@ Input: observation, previous-tick drive urgencies, prediction error.
 - **Record.** Observed cells: `v̂ ← obs`, `c ← min(1, 1 + α·urgency_prev[r])`
   for the matching drive. Hungry organisms encode food more strongly.
 - **Forget.** `c ← ρ·c` for unobserved cells; `v̂` relaxes toward the region prior.
-Output: per resource r ∈ {food, water}: `Remembered { dir, dist, conf }` for
-the nearest cell with `c·v̂` above threshold (`conf = 0` if none); mean
-confidence of the four neighbor cells (for Exploration).
+Output: per resource r ∈ {food, water}: `Remembered { target, dist, conf,
+amounts, toward }` for the cell maximizing `c·v̂·γ_m^dist` among cells with
+`c·v̂` above threshold (`conf = 0` if none; amendment M5: the nearest
+qualifying cell kept the organism grazing a patch edge); mean confidence of
+the four neighbor cells (for Exploration).
 Cut from Phase 1: episodic event ring (nothing read it; danger and surprise
 events go to the log instead).
 
@@ -101,22 +105,32 @@ the cell the action lands on (the current cell for non-moves). Running squared
 error `u_{a,d}` (uncertainty).
 Learn: normalized LMS on `Δ̂_d = θ_{a,d}·φ` against the realized body delta for
 the action taken. Output: `Δ̂[a][d]`, `uncertainty[a]`, scalar prediction
-error, and `at_remembered[r]`: the predicted gain of Eat (Drink) evaluated at
-the previous tick's remembered food (water) cell, using the remembered
-amounts there and the current ambient.
+error. The world model prices costs and dynamics (moves, rest, temperature);
+consumption gains are priced by the self-model's yield (§3.5, amendment M5).
 Because `φ` carries destination features, the model can learn that moving
 toward the hot side raises Tb and that eating on a food cell raises E, without
 any rule naming those relations.
 
 ### 3.5 Self-model
-Owns: EMA drift rate per variable `ḋ_d`.
-Input: realized deltas, previous-tick `Remembered`.
+Owns: EMA drift rate per variable `ḋ_d`; **yield per unit** `ŷ_r` (EMA of
+realized gain ÷ amount on the cell, over Eat/Drink ticks); the largest
+amount ever consumed at, `max_r`.
+Input: realized deltas, previous action and the cell amounts before it,
+current cell amounts, previous-tick `Remembered`.
 Output: `ttc_d = clamp((v_d − danger_d)/max(−ḋ_d, ε), 0, T_max)`;
-`reach_r = Remembered[r].dist` in ticks (one move per tick; division dropped).
+`reach_r = Remembered[r].dist` in ticks; `ŷ_r`; novelty flags
+`novel_here[r] = here_r > 2·max_r + 0.02` and likewise `novel_remembered[r]`
+for the remembered amount.
 Reads Memory's previous-tick output (documented lag, see §5).
-Amendment (M2): the intake EMA was dropped. Expected gain at a remembered
-cell is now the world model's prediction for consuming there (§3.4, §3.6), so
-one learned model prices both consumption and travel.
+Amendment history. M2: the intake EMA was dropped in favor of the world
+model's prediction at the remembered cell. M5: that was reversed. The linear
+world model shares seven features across all actions; normalized LMS spreads
+one or two patch-edge samples across the bias and the interoceptive
+features, so the predicted gain at a remembered patch stayed near zero and in
+the `far` family every organism starved between two patches it remembered.
+Gain per unit consumed is a capability of the body, which is what the
+self-model is for; it extrapolates to richer cells by construction, which is
+a declared inductive bias ("gain is proportional to amount").
 
 ### 3.6 Drives
 Four drives: Energy, Hydration, Temp, Exploration. Each owns gain `g_d`,
@@ -127,10 +141,11 @@ Urgency: `u_d = e_d·|e_d| + λ_d · max(0, 1 − ttc_d / reach_d)` (reach = ∞
 nothing remembered → anticipation term 0).
 
 Bid: `bid_d(a) = g_d · u_d · value_d(a) · (1 + h_{d,a})`, where
-- for Eat, Drink, Rest, and for all actions of the Temp drive:
-  `value_d(a) = Δ̂[a][d]` from the world model (learned);
+- for Eat (Energy) and Drink (Hydration): `value = ŷ_r · here_r` (self-model
+  yield times what is on the cell); for Rest, the other consumption, and all
+  actions of the Temp drive: `value_d(a) = Δ̂[a][d]` from the world model;
 - for moves of Energy/Hydration with a remembered target: **authored
-  fragment F1**: `value = conf · at_remembered[r] · γ^dist` if `a` reduces
+  fragment F1**: `value = conf · ŷ_r · amount_r · γ^dist` if `a` reduces
   distance to the remembered resource, else `Δ̂[a][d]`. This is a hand-written
   rule mapping memory to movement; the price is learned. It is declared here,
   listed in the frozen config, and is a Phase 4 replacement target
@@ -144,7 +159,13 @@ Bid: `bid_d(a) = g_d · u_d · value_d(a) · (1 + h_{d,a})`, where
   regime shift had no positive-valued action and the organism starved in place.)
 - Exploration: urgency = `explore_scale · sqrt(mean uncertainty)`; F2 again
   (least-known neighbor) plus a term favoring the action with the highest
-  relative `uncertainty[a]`.
+  relative `uncertainty[a]`, plus **novelty** (amendment 2026-10-22, M5):
+  value for moving toward a remembered cell whose amount exceeds twice the
+  largest amount the organism has ever consumed at (`novel_remembered`, from
+  the self-model), and, standing on such a cell (`novel_here`), value for
+  consuming there that outranks any pull elsewhere. Before the first
+  successful consumption `ŷ_r = 0`, so novelty is what takes the organism to
+  its first patch and makes it try.
 
 **Adaptation (three carriers, each pre-registered).**
 - *Gain, fast up / slow down.* On an edge-triggered danger event for d:
@@ -165,8 +186,15 @@ Bid: `bid_d(a) = g_d · u_d · value_d(a) · (1 + h_{d,a})`, where
 ### 3.7 Arbitration
 Content-free: input is the `4 × 7` bid matrix and the previous action, nothing
 else. Phase 1 has one variant:
-- `WinnerTakeAll { persistence }`: `argmax_a Σ_d bid_d(a) + π·[a = prev]`,
-  ties broken by fixed action order (no RNG).
+- `WinnerTakeAll { persistence, drive_persistence }`:
+  `argmax_a Σ_d w_d·bid_d(a) + π·[a = prev]` with `w_d = 1 + ρ` for the drive
+  that contributed most to the previous winning action and 1 otherwise; ties
+  by fixed action order (no RNG). Amendment 2026-10-22 (M5): `ρ` was added
+  after the `far` family showed dithering: with both patches ten cells away
+  the hungrier drive won until its variable improved slightly, the other
+  drive then won and the organism turned around, and it starved between the
+  patches. Motivation-level hysteresis is the ethological remedy (McFarland &
+  Sibly 1975). Arbitration still sees only bids and its own last winner.
 `Softmax` and `LateralInhibition` are cut from Phase 1 (nothing in E1–E5 needs
 them); Phase 4 candidates if WTA shows dithering.
 Baseline selectors (`FixedPriority`, `GreedyError`) are **not** arbitration
@@ -189,8 +217,8 @@ Env  ──obs──▶ Perception ──obs──▶ Memory, WorldModel (φ, pr
 WorldModel ──Δ̂, uncertainty──▶ Drives
 WorldModel ──prediction error──▶ Memory (salience)
 Memory ──Remembered, neighbor conf──▶ Drives, SelfModel (lagged one tick)
-SelfModel ──ttc, reach──▶ Drives
-WorldModel ──at_remembered──▶ Drives (F1 price; reads previous-tick Remembered)
+SelfModel ──ttc, reach, yield, novelty──▶ Drives
+Perception ──here (cell amounts)──▶ Drives (consumption value), SelfModel (yield)
 Drives ──urgency──▶ Memory (lagged one tick)
 Drives ──bids──▶ Arbitration ──action──▶ Body/Env
 Arbitration ──prev action──▶ Arbitration (persistence), Drives (habit credit)

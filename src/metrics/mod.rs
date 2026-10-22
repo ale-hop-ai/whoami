@@ -226,7 +226,7 @@ mod tests {
     use crate::body::Action;
 
     fn row(e: f64, a: Action) -> Row {
-        Row { t: 0, action: a, pos: (0, 0), body: [e, 0.5, 0.5], here: [0.0; 2], vis: [false; 2], errors: None, predicted: None, remembered: None }
+        Row { t: 0, action: a, pos: (0, 0), body: [e, 0.5, 0.5], here: [0.0; 2], vis: [false; 2], errors: None, predicted: None, values: None, remembered: None }
     }
 
     #[test]

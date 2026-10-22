@@ -6,18 +6,7 @@ use std::path::Path;
 use crate::body::{Action, N_ACTIONS, N_VARS};
 use crate::env::RegimeOp;
 
-#[derive(Clone, Debug)]
-pub struct Row {
-    pub t: u64,
-    pub action: Action,
-    pub pos: (usize, usize),
-    pub body: [f64; N_VARS],
-    pub here: [f64; 2],
-    pub vis: [bool; 2],
-    pub errors: Option<[f64; N_VARS]>,
-    pub predicted: Option<[[f64; N_VARS]; N_ACTIONS]>,
-    pub remembered: Option<[(usize, usize, usize, f64); 2]>,
-}
+pub use crate::log::Row;
 
 #[derive(Clone, Debug)]
 pub struct Trajectory {
@@ -31,7 +20,8 @@ pub struct Trajectory {
 struct OrgIn {
     errors: [f64; N_VARS],
     predicted: [[f64; N_VARS]; N_ACTIONS],
-    remembered: [(usize, usize, usize, f64); 2],
+    values: Vec<[f64; N_ACTIONS]>,
+    remembered: [crate::log::RememberedLog; 2],
 }
 
 #[derive(Deserialize)]
@@ -45,6 +35,10 @@ enum EventIn {
 }
 
 impl Trajectory {
+    pub fn from_collected(c: crate::log::Collected) -> Trajectory {
+        Trajectory { rows: c.rows, regimes: c.regimes, dangers: c.dangers, death: c.death }
+    }
+
     pub fn load(path: &Path) -> Result<Trajectory, String> {
         let text = std::fs::read_to_string(path).map_err(|e| format!("read {}: {e}", path.display()))?;
         Self::parse(&text)
@@ -59,11 +53,14 @@ impl Trajectory {
             let ev: EventIn = serde_json::from_str(line).map_err(|e| format!("line {}: {e}", i + 1))?;
             match ev {
                 EventIn::Tick { t, action, pos, body, here, vis, org } => {
-                    let (errors, predicted, remembered) = match org {
-                        Some(o) => (Some(o.errors), Some(o.predicted), Some(o.remembered)),
-                        None => (None, None, None),
+                    let (errors, predicted, values, remembered) = match org {
+                        Some(o) => {
+                            let v = if o.values.len() == 4 { Some([o.values[0], o.values[1], o.values[2], o.values[3]]) } else { None };
+                            (Some(o.errors), Some(o.predicted), v, Some(o.remembered))
+                        }
+                        None => (None, None, None, None),
                     };
-                    tr.rows.push(Row { t, action, pos, body, here, vis, errors, predicted, remembered });
+                    tr.rows.push(Row { t, action, pos, body, here, vis, errors, predicted, values, remembered });
                 }
                 EventIn::Regime { t, op } => tr.regimes.push((t, op)),
                 EventIn::Danger { t, var } => tr.dangers.push((t, var.index())),

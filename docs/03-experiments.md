@@ -4,7 +4,16 @@ Everything in this file is pre-registered: thresholds are fixed here before
 implementation and may only change by an explicit, dated amendment at the top of
 this file.
 
-Amendments: none.
+Amendments:
+- 2026-10-22 (M5): margin, viability and intake are averaged over the full
+  run horizon with dead ticks counted as 0, so an early death cannot raise
+  them (survivorship control; found when Reactive's short life out-scored
+  EPI on raw margin). Anticipation and entropies remain over ticks alive.
+- 2026-10-22 (M5): `FixedPriority` serves the first drive in order whose
+  |error| exceeds 0.25. With threshold zero it never drank and died within
+  200 ticks, which is not a comparison. Consequently "no reversal by
+  construction" is withdrawn: its reversal rate is measured and reported as
+  the floor that EPI must exceed in H6.
 
 ## 1. Primary metrics
 
@@ -17,9 +26,9 @@ metrics; survival is secondary** and analyzed with censoring.
 
 | Metric | Definition |
 |--------|-----------|
-| Margin `M(w)` | mean over window of `min_d` distance of `v_d` to its nearest bound |
-| Viability `V(w)` | fraction of ticks in window with all `|e_d| < 1` |
-| Resource efficiency | intake per tick alive; moves per unit intake |
+| Margin `M(w)` | mean over window of `min_d` distance of `v_d` to its nearest bound; per run, averaged over the full horizon with dead ticks as 0 |
+| Viability `V(w)` | fraction of ticks in window with all `|e_d| < 1`; per run, horizon-averaged as above |
+| Resource efficiency | intake per tick over the full horizon (dead ticks 0); moves per unit intake |
 | Survival `S` | ticks alive, censored at `T` (Kaplan–Meier) |
 | Adaptation speed `A` | ticks after a regime shift until rolling `V` returns to 90% of its pre-shift mean (censored at next shift) |
 | Prediction accuracy | MSE between the **logged** `Δ̂` and realized deltas (post-lesion signal) |
@@ -78,7 +87,7 @@ the authored fragments F1/F2 verbatim.
 | `Random` | uniform action | floor |
 | `Reactive` | no memory, no learning. Lowest-margin variable chosen; if a matching resource is visible, F1 toward it; for Tb, step toward the visible cell with ambient closest to the Tb setpoint; else F2-style random walk | memory + learning + competitive arbitration |
 | `GreedyError` | full EPI processes; selector = serve `argmax_d |e_d|` with that drive's best-valued action | competitive arbitration vs largest-error rule (E5) |
-| `FixedPriority` | full EPI processes; selector = first drive in fixed order E > H > Tb with `|e_d| > 0` (threshold zero, so no reversal is possible) | competitive arbitration vs fixed order (E5) |
+| `FixedPriority` | full EPI processes; selector = first drive in fixed order E > H > Tb with `|e_d| > 0.25` (amended; see top) | competitive arbitration vs fixed order (E5) |
 | `Frozen` | one common organism pretrained 10 000 ticks in `default` seed 0, snapshotted; all of `g`, `h`, `θ`, memory map frozen afterwards | value of *learning* for individuality and continuity |
 | `Oracle` (mandatory) | authored commuter with full map | ceiling; A5 check |
 | `MixedForager` (mandatory) | authored policy that never leaves the mixed zone | A5 check |

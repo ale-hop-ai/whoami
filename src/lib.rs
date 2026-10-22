@@ -21,7 +21,7 @@ use std::path::PathBuf;
 use agent::Agent;
 use config::Config;
 use env::World;
-use experiment::baselines::{MixedForagerAgent, OracleAgent, RandomAgent};
+use experiment::baselines::{MixedForagerAgent, OracleAgent, RandomAgent, ReactiveAgent};
 use hash::Fnv;
 use log::{Event, Logger};
 use organism::Organism;
@@ -34,6 +34,7 @@ use snapshot::Snapshot;
 pub enum AgentKind {
     Epi,
     Random,
+    Reactive,
     Oracle,
     MixedForager,
 }
@@ -43,9 +44,10 @@ impl AgentKind {
         match s {
             "epi" => Ok(AgentKind::Epi),
             "random" => Ok(AgentKind::Random),
+            "reactive" => Ok(AgentKind::Reactive),
             "oracle" => Ok(AgentKind::Oracle),
             "mixed" => Ok(AgentKind::MixedForager),
-            other => Err(format!("unknown agent '{other}' (expected: epi, random, oracle, mixed)")),
+            other => Err(format!("unknown agent '{other}' (expected: epi, random, reactive, oracle, mixed)")),
         }
     }
 }
@@ -60,6 +62,7 @@ pub fn build_agent(kind: AgentKind, cfg: &Config, w: &World) -> Box<dyn Agent> {
     match kind {
         AgentKind::Epi => Box::new(organism::Organism::new(cfg.organism.clone(), cfg.body.clone(), w, pos)),
         AgentKind::Random => Box::new(RandomAgent::new(cfg.body.clone(), pos)),
+        AgentKind::Reactive => Box::new(ReactiveAgent::new(cfg.body.clone(), &cfg.organism.homeostasis, pos)),
         AgentKind::Oracle => Box::new(OracleAgent::new(cfg.body.clone(), pos)),
         AgentKind::MixedForager => Box::new(MixedForagerAgent::new(cfg.body.clone(), pos)),
     }
@@ -90,10 +93,21 @@ pub struct Session {
 
 impl Session {
     pub fn new(cfg: &Config, config_hash: u64, seed: u64) -> Session {
+        Session::with_streams(cfg, config_hash, Streams::from_seed(seed))
+    }
+
+    pub fn with_streams(cfg: &Config, config_hash: u64, streams: Streams) -> Session {
         let world = World::new(cfg.world.clone());
         let pos = start_position(&world);
         let organism = Organism::new(cfg.organism.clone(), cfg.body.clone(), &world, pos);
-        Session { world, organism, streams: Streams::from_seed(seed), hash: Fnv::new(), config_hash }
+        Session { world, organism, streams, hash: Fnv::new(), config_hash }
+    }
+
+    /// A session around an existing organism (transplants, Frozen, forks).
+    pub fn adopt(cfg: &Config, config_hash: u64, mut organism: Organism, streams: Streams) -> Session {
+        let world = World::new(cfg.world.clone());
+        organism.transplant(start_position(&world));
+        Session { world, organism, streams, hash: Fnv::new(), config_hash }
     }
 
     pub fn from_snapshot(s: Snapshot) -> Session {

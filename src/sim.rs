@@ -43,6 +43,11 @@ impl Streams {
         let root = Rng::from_seed(seed);
         Streams { env: root.derive(1), org: root.derive(2) }
     }
+
+    /// Separate environment and organism seeds (E2/E3 protocols).
+    pub fn new(env_seed: u64, org_seed: u64) -> Streams {
+        Streams { env: Rng::from_seed(env_seed).derive(1), org: Rng::from_seed(org_seed).derive(2) }
+    }
 }
 
 /// Run `ticks` ticks or until death. The trajectory hash covers

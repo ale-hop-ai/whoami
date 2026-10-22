@@ -16,6 +16,7 @@ use serde::{Deserialize, Serialize};
 use crate::agent::Agent;
 use crate::body::{Action, Body, BodyParams, Deltas, N_ACTIONS, VARS};
 use crate::env::World;
+use crate::experiment::baselines::Selector;
 use crate::log::{Event, Logger, OrgTick};
 use crate::rng::Rng;
 use crate::signals::{EXPLORE, N_DRIVES, N_RESOURCES, Remembered, Signals};
@@ -59,6 +60,8 @@ pub struct Organism {
     urgency_prev: [f64; N_DRIVES],
     /// Learning switch used by the Frozen baseline.
     learning: bool,
+    /// Baseline selectors replace Drives+Arbitration; Competitive is EPI.
+    selector: Selector,
     #[serde(skip)]
     last: OrgTick,
 }
@@ -79,6 +82,7 @@ impl Organism {
             remembered_prev: [Remembered::default(); N_RESOURCES],
             urgency_prev: [0.0; N_DRIVES],
             learning: true,
+            selector: Selector::Competitive,
             last: OrgTick::default(),
             params,
             body_params,
@@ -87,6 +91,35 @@ impl Organism {
 
     pub fn set_learning(&mut self, on: bool) {
         self.learning = on;
+    }
+
+    pub fn learning(&self) -> bool {
+        self.learning
+    }
+
+    pub fn set_selector(&mut self, s: Selector) {
+        self.selector = s;
+    }
+
+    pub fn body_mut(&mut self) -> &mut Body {
+        &mut self.body
+    }
+
+    /// Move the organism into another world: body and position reset to the
+    /// start, carried tick values cleared, everything learned kept.
+    pub fn transplant(&mut self, pos: (usize, usize)) {
+        self.body = Body::new(&self.body_params, pos);
+        self.deltas_prev = Deltas::default();
+        self.prev_action = None;
+        self.remembered_prev = [Remembered::default(); N_RESOURCES];
+        self.urgency_prev = [0.0; N_DRIVES];
+    }
+
+    /// A fresh organism that inherits only `donor`'s body and position.
+    pub fn body_only_from(donor: &Organism, world: &World) -> Organism {
+        let mut o = Organism::new(donor.params.clone(), donor.body_params.clone(), world, donor.body.pos);
+        o.body = donor.body.clone();
+        o
     }
 
     pub fn params(&self) -> &OrganismParams {
@@ -136,7 +169,7 @@ impl Organism {
 
         // 6. Memory (reads previous-tick urgency).
         let mem = if les.memory.runs() {
-            let out = self.memory.step(&obs, &self.urgency_prev, &p.memory);
+            let out = self.memory.step(&obs, &self.urgency_prev, &p.memory, self.learning);
             if les.memory.passes() { out } else { MemoryOut::null() }
         } else {
             MemoryOut::null()
@@ -170,8 +203,11 @@ impl Organism {
             bids[EXPLORE] = [0.0; N_ACTIONS];
         }
 
-        // 8. Arbitration.
-        let action = self.arbitration.select(&bids, self.prev_action, &p.arbitration);
+        // 8. Arbitration (or a baseline selector that replaces it).
+        let action = match self.selector.select(&ho.errors, &dr.values) {
+            Some(a) => a,
+            None => self.arbitration.select(&bids, self.prev_action, &p.arbitration),
+        };
 
         // 9. Action.
         let deltas = self.body.apply(action, world, &self.body_params);
@@ -194,8 +230,8 @@ impl Organism {
             prediction_error: wm.prediction_error,
             gains: self.drives.gains().to_vec(),
             remembered: [
-                (mem.remembered[0].target.0, mem.remembered[0].target.1, mem.remembered[0].dist, mem.remembered[0].conf),
-                (mem.remembered[1].target.0, mem.remembered[1].target.1, mem.remembered[1].dist, mem.remembered[1].conf),
+                (mem.remembered[0].target.0, mem.remembered[0].target.1, mem.remembered[0].dist, mem.remembered[0].conf, mem.remembered[0].amounts[0]),
+                (mem.remembered[1].target.0, mem.remembered[1].target.1, mem.remembered[1].dist, mem.remembered[1].conf, mem.remembered[1].amounts[1]),
             ],
         };
         action
@@ -213,5 +249,9 @@ impl Agent for Organism {
 
     fn org_tick(&self) -> Option<&OrgTick> {
         Some(&self.last)
+    }
+
+    fn into_organism(self: Box<Self>) -> Option<Organism> {
+        Some(*self)
     }
 }

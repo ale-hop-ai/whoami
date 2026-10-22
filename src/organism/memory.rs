@@ -101,7 +101,16 @@ impl Memory {
         &self.prior
     }
 
-    pub fn step(&mut self, obs: &Observation, urgency_prev: &[f64; N_DRIVES], p: &MemoryParams) -> MemoryOut {
+    /// `learn` false (the Frozen baseline) computes outputs from the map as
+    /// it is and writes nothing.
+    pub fn step(&mut self, obs: &Observation, urgency_prev: &[f64; N_DRIVES], p: &MemoryParams, learn: bool) -> MemoryOut {
+        if learn {
+            self.record(obs, urgency_prev, p);
+        }
+        self.outputs(obs, p)
+    }
+
+    fn record(&mut self, obs: &Observation, urgency_prev: &[f64; N_DRIVES], p: &MemoryParams) {
         self.tick += 1;
         // Forget and relax everywhere; observed cells are overwritten below.
         for i in 0..self.estimate.len() {
@@ -131,6 +140,9 @@ impl Memory {
         if self.tick.is_multiple_of(p.consolidate_every) {
             self.consolidate(p);
         }
+    }
+
+    fn outputs(&self, obs: &Observation, p: &MemoryParams) -> MemoryOut {
         // Nearest remembered target per resource, excluding the current cell.
         let mut remembered = [Remembered::default(); N_RESOURCES];
         for r in 0..N_RESOURCES {
@@ -204,15 +216,15 @@ mod tests {
     fn remembers_then_forgets() {
         let p = MemoryParams::default();
         let mut m = Memory::new(16, 16);
-        m.step(&obs((3, 3), 1.0), &[0.0; 4], &p);
-        let out = m.step(&obs((8, 8), 0.0), &[0.0; 4], &p);
+        m.step(&obs((3, 3), 1.0), &[0.0; 4], &p, true);
+        let out = m.step(&obs((8, 8), 0.0), &[0.0; 4], &p, true);
         assert_eq!(out.remembered[0].target, (3, 3));
         assert_eq!(out.remembered[0].dist, 10);
         assert!(out.remembered[0].toward[0] && out.remembered[0].toward[3]); // N and W
         for _ in 0..2000 {
-            m.step(&obs((8, 8), 0.0), &[0.0; 4], &p);
+            m.step(&obs((8, 8), 0.0), &[0.0; 4], &p, true);
         }
-        let out = m.step(&obs((8, 8), 0.0), &[0.0; 4], &p);
+        let out = m.step(&obs((8, 8), 0.0), &[0.0; 4], &p, true);
         assert_eq!(out.remembered[0].conf, 0.0);
     }
 
@@ -221,8 +233,8 @@ mod tests {
         let p = MemoryParams::default();
         let mut calm = Memory::new(16, 16);
         let mut hungry = Memory::new(16, 16);
-        calm.step(&obs((3, 3), 1.0), &[0.0; 4], &p);
-        hungry.step(&obs((3, 3), 1.0), &[0.4; 4], &p);
+        calm.step(&obs((3, 3), 1.0), &[0.0; 4], &p, true);
+        hungry.step(&obs((3, 3), 1.0), &[0.4; 4], &p, true);
         assert!(hungry.conf_at(3, 3)[0] > calm.conf_at(3, 3)[0]);
     }
 
@@ -231,13 +243,24 @@ mod tests {
         let p = MemoryParams { consolidate_every: 10, ..MemoryParams::default() };
         let mut m = Memory::new(16, 16);
         for _ in 0..10 {
-            m.step(&obs((3, 3), 1.0), &[0.0; 4], &p);
+            m.step(&obs((3, 3), 1.0), &[0.0; 4], &p, true);
         }
         assert!(m.priors()[0][0] > 0.0);
         for _ in 0..3000 {
-            m.step(&obs((12, 12), 0.0), &[0.0; 4], &p);
+            m.step(&obs((12, 12), 0.0), &[0.0; 4], &p, true);
         }
         assert!(m.conf_at(3, 3)[0] < 1e-3);
         assert!(m.priors()[0][0] > 0.0);
+    }
+
+    #[test]
+    fn frozen_memory_writes_nothing() {
+        let p = MemoryParams::default();
+        let mut m = Memory::new(16, 16);
+        m.step(&obs((3, 3), 1.0), &[0.0; 4], &p, true);
+        let before = m.conf_at(3, 3)[0];
+        m.step(&obs((8, 8), 0.0), &[0.0; 4], &p, false);
+        assert_eq!(m.conf_at(3, 3)[0], before);
+        assert_eq!(m.conf_at(8, 8)[0], 0.0);
     }
 }

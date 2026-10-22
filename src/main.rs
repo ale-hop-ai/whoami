@@ -10,10 +10,12 @@ use epi::snapshot::Snapshot;
 use epi::{AgentKind, Session};
 
 const USAGE: &str = "usage:
-  epi run  [--config C] [--seed S] [--ticks T] [--out DIR] [--agent epi|random|oracle|mixed] [--log-every K] [--snapshot-every K]
+  epi run  [--config C] [--seed S] [--ticks T] [--out DIR] [--agent epi|random|reactive|oracle|mixed] [--log-every K] [--snapshot-every K]
   epi fork --snapshot FILE --env-seed S [--ticks T] [--out DIR] [--log-every K]
+  epi experiment --name e1 [--config C] [--out DIR] [--seeds N] [--ticks T] [--window W]
   epi metrics --log FILE [--config C] [--window W]
-  epi hash [--config C] [--seed S] [--ticks T] [--agent epi|random|oracle|mixed]";
+  epi defaults
+  epi hash [--config C] [--seed S] [--ticks T] [--agent epi|random|reactive|oracle|mixed]";
 
 struct Args {
     config: Option<PathBuf>,
@@ -27,10 +29,12 @@ struct Args {
     env_seed: Option<u64>,
     log: Option<PathBuf>,
     window: usize,
+    name: Option<String>,
+    seeds: usize,
 }
 
 fn parse(args: &[String]) -> Result<Args, String> {
-    let mut a = Args { config: None, seed: 0, ticks: 20_000, out: None, agent: AgentKind::Epi, log_every: 1, snapshot_every: None, snapshot: None, env_seed: None, log: None, window: 500 };
+    let mut a = Args { config: None, seed: 0, ticks: 20_000, out: None, agent: AgentKind::Epi, log_every: 1, snapshot_every: None, snapshot: None, env_seed: None, log: None, window: 500, name: None, seeds: 30 };
     let mut i = 0;
     while i < args.len() {
         let key = &args[i];
@@ -47,6 +51,8 @@ fn parse(args: &[String]) -> Result<Args, String> {
             "--env-seed" => a.env_seed = Some(val.parse().map_err(|_| format!("bad env-seed {val}"))?),
             "--log" => a.log = Some(PathBuf::from(val)),
             "--window" => a.window = val.parse().map_err(|_| format!("bad window {val}"))?,
+            "--name" => a.name = Some(val.clone()),
+            "--seeds" => a.seeds = val.parse().map_err(|_| format!("bad seeds {val}"))?,
             other => return Err(format!("unknown flag {other}")),
         }
         i += 2;
@@ -78,6 +84,11 @@ fn main() {
         "fork" => cmd_fork(&argv[1..]),
         "hash" => cmd_hash(&argv[1..]),
         "metrics" => cmd_metrics(&argv[1..]),
+        "experiment" => cmd_experiment(&argv[1..]),
+        "defaults" => {
+            outln!("{}", serde_json::to_string_pretty(&Config::default()).unwrap());
+            Ok(())
+        }
         _ => Err(USAGE.to_string()),
     };
     if let Err(e) = result {
@@ -166,6 +177,19 @@ fn cmd_metrics(args: &[String]) -> Result<(), String> {
         let speed = adaptation_speed(&tr, *t, a.window, 0.9, 4000, sp, wd);
         outln!("regime {t} {op:?}: adaptation_speed {speed:?}");
     }
+    Ok(())
+}
+
+fn cmd_experiment(args: &[String]) -> Result<(), String> {
+    use epi::experiment::{Context, git_commit, run_named};
+    let a = parse(args)?;
+    let (cfg, cfg_hash) = load(&a)?;
+    let name = a.name.clone().ok_or("experiment needs --name")?;
+    let out = a.out.clone().unwrap_or_else(|| PathBuf::from(format!("results/{name}")));
+    let ctx = Context { seeds: a.seeds, ticks: a.ticks, window: a.window, config_hash: cfg_hash, commit: git_commit(), held_out_base: 100 };
+    let report = run_named(&name, &cfg, &ctx, &out)?;
+    outln!("{}", report.markdown());
+    outln!("written: {}", out.join("report.md").display());
     Ok(())
 }
 

@@ -5,6 +5,8 @@ use crate::agent::Agent;
 use crate::body::{ACTIONS, Action, Body, BodyParams, MOVES, Var};
 use crate::env::{Resource, World};
 use crate::log::Logger;
+use crate::organism::homeostasis::HomeostasisParams;
+use crate::organism::perception::{Observation, Perception, RADIUS, WINDOW};
 use crate::rng::Rng;
 
 /// Uniform random action. The floor.
@@ -183,6 +185,176 @@ impl Agent for MixedForagerAgent {
                 }
                 None => Action::Rest,
             }
+        };
+        self.body.apply(a, w, &self.params);
+        self.prev = Some(a);
+        a
+    }
+
+    fn body(&self) -> &Body {
+        &self.body
+    }
+}
+
+/// Replaces the Drives+Arbitration stage inside an otherwise complete
+/// organism. `Competitive` is EPI proper. The others read errors, which
+/// arbitration proper never does; that is why they live here.
+#[derive(Clone, Copy, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+pub enum Selector {
+    #[default]
+    Competitive,
+    /// Serve the drive with the largest |error|, by its best-valued action.
+    GreedyError,
+    /// Serve the first drive in `order` whose |error| exceeds `threshold`.
+    FixedPriority { order: [usize; 3], threshold: f64 },
+}
+
+impl Selector {
+    pub const FIXED_THRESHOLD: f64 = 0.25;
+
+    pub fn parse(s: &str) -> Result<Selector, String> {
+        match s {
+            "competitive" => Ok(Selector::Competitive),
+            "greedy" => Ok(Selector::GreedyError),
+            "fixed" => Ok(Selector::FixedPriority { order: [0, 1, 2], threshold: Self::FIXED_THRESHOLD }),
+            other => Err(format!("unknown selector '{other}'")),
+        }
+    }
+
+    /// Best action for drive `d`: the one whose value moves the variable in
+    /// the direction the error asks for. Ties by action order.
+    pub fn best_for(d: usize, errors: &[f64; 3], values: &[[f64; crate::body::N_ACTIONS]; crate::signals::N_DRIVES]) -> Action {
+        let sign = if errors[d] >= 0.0 { 1.0 } else { -1.0 };
+        let mut best = ACTIONS[0];
+        let mut best_v = f64::NEG_INFINITY;
+        for a in ACTIONS {
+            let v = sign * values[d][a.index()];
+            if v > best_v {
+                best_v = v;
+                best = a;
+            }
+        }
+        best
+    }
+
+    pub fn select(&self, errors: &[f64; 3], values: &[[f64; crate::body::N_ACTIONS]; crate::signals::N_DRIVES]) -> Option<Action> {
+        match self {
+            Selector::Competitive => None,
+            Selector::GreedyError => {
+                let mut d = 0;
+                for i in 1..3 {
+                    if errors[i].abs() > errors[d].abs() {
+                        d = i;
+                    }
+                }
+                Some(Self::best_for(d, errors, values))
+            }
+            Selector::FixedPriority { order, threshold } => {
+                for &d in order {
+                    if errors[d].abs() > *threshold {
+                        return Some(Self::best_for(d, errors, values));
+                    }
+                }
+                Some(Action::Rest)
+            }
+        }
+    }
+}
+
+/// No memory, no learning: serve the largest error if its remedy is in
+/// sight, else wander. Shares Perception with the organism and the spirit
+/// of F1/F2 so E1 does not credit those fragments to EPI.
+pub struct ReactiveAgent {
+    body: Body,
+    params: BodyParams,
+    setpoint: [f64; 3],
+    width: [f64; 3],
+    perception: Perception,
+    prev: Option<Action>,
+}
+
+impl ReactiveAgent {
+    pub const THRESHOLD: f64 = 0.25;
+    pub const VISIBLE_MIN: f64 = 0.05;
+    pub const GRAZE_MIN: f64 = 0.012;
+
+    pub fn new(params: BodyParams, homeo: &HomeostasisParams, pos: (usize, usize)) -> ReactiveAgent {
+        ReactiveAgent { body: Body::new(&params, pos), params, setpoint: homeo.setpoint, width: homeo.width, perception: Perception, prev: None }
+    }
+}
+
+/// Window cell (row, col) → the first move that heads there; None at center.
+fn move_toward_window(row: usize, col: usize, prev: Option<Action>) -> Option<Action> {
+    let dr = row as i32 - RADIUS;
+    let dc = col as i32 - RADIUS;
+    let mut options = Vec::new();
+    if dc > 0 { options.push(Action::MoveE) }
+    if dc < 0 { options.push(Action::MoveW) }
+    if dr > 0 { options.push(Action::MoveS) }
+    if dr < 0 { options.push(Action::MoveN) }
+    if options.is_empty() {
+        return None;
+    }
+    Some(match prev {
+        Some(p) if options.contains(&p) => p,
+        _ => options[0],
+    })
+}
+
+impl Agent for ReactiveAgent {
+    fn step(&mut self, w: &mut World, rng: &mut Rng, _log: &mut Logger) -> Action {
+        let obs = self.perception.observe(w, &self.body, self.prev);
+        let mut errors = [0.0; 3];
+        for d in 0..3 {
+            errors[d] = (self.setpoint[d] - self.body.v[d]) / self.width[d];
+        }
+        let mut d = 0;
+        for i in 1..3 {
+            if errors[i].abs() > errors[d].abs() {
+                d = i;
+            }
+        }
+        let a = if errors[d].abs() < Self::THRESHOLD {
+            Action::Rest
+        } else if d < 2 {
+            let grid = if d == 0 { &obs.food } else { &obs.water };
+            let (cr, cc) = Observation::center();
+            if grid[cr][cc] >= Self::GRAZE_MIN {
+                if d == 0 { Action::Eat } else { Action::Drink }
+            } else {
+                // Nearest visible cell with the resource.
+                let mut best: Option<(usize, usize, i32)> = None;
+                for r in 0..WINDOW {
+                    for c in 0..WINDOW {
+                        if grid[r][c] >= Self::VISIBLE_MIN {
+                            let dist = (r as i32 - RADIUS).abs() + (c as i32 - RADIUS).abs();
+                            if best.is_none_or(|b| dist < b.2) {
+                                best = Some((r, c, dist));
+                            }
+                        }
+                    }
+                }
+                match best.and_then(|(r, c, _)| move_toward_window(r, c, self.prev)) {
+                    Some(m) => m,
+                    None => match self.prev {
+                        Some(p) if p.is_move() && rng.f64() < 0.8 => p,
+                        _ => MOVES[rng.below(4)],
+                    },
+                }
+            }
+        } else {
+            // Temperature: head for the visible cell whose ambient is closest to the setpoint.
+            let (cr, cc) = Observation::center();
+            let mut best = (cr, cc, (obs.ambient01[cr][cc] - self.setpoint[2]).abs());
+            for r in 0..WINDOW {
+                for c in 0..WINDOW {
+                    let gap = (obs.ambient01[r][c] - self.setpoint[2]).abs();
+                    if gap < best.2 {
+                        best = (r, c, gap);
+                    }
+                }
+            }
+            move_toward_window(best.0, best.1, self.prev).unwrap_or(Action::Rest)
         };
         self.body.apply(a, w, &self.params);
         self.prev = Some(a);

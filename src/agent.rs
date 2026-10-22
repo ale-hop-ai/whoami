@@ -13,4 +13,8 @@ pub trait Agent {
     fn org_tick(&self) -> Option<&OrgTick> {
         None
     }
+    /// The organism inside, for protocols that continue it. Baselines return None.
+    fn into_organism(self: Box<Self>) -> Option<crate::organism::Organism> {
+        None
+    }
 }

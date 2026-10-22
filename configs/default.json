@@ -1,0 +1,125 @@
+{
+  "world": {
+    "width": 16,
+    "height": 16,
+    "food_center": [
+      3,
+      8
+    ],
+    "water_center": [
+      12,
+      8
+    ],
+    "spread_food_center": [
+      1,
+      1
+    ],
+    "spread_water_center": [
+      14,
+      14
+    ],
+    "patch_radius": 4.0,
+    "patch_peak": 1.0,
+    "mixed_cap": 0.03,
+    "regrowth": 0.02,
+    "regrowth_floor": 0.05,
+    "regrowth_noise": 0.002,
+    "gradient_strength": 0.6,
+    "regime_every": 5000,
+    "regime_ops": [
+      "SwapPatches",
+      "RotateGradient",
+      "Scarcity",
+      "Spread"
+    ]
+  },
+  "body": {
+    "start": [
+      0.6,
+      0.6,
+      0.5
+    ],
+    "base_energy": 0.003,
+    "base_hydration": 0.003,
+    "move_cost": 0.001,
+    "move_heat": 0.01,
+    "rest_factor": 0.5,
+    "temp_relax": 0.03,
+    "temp_ref": 0.5,
+    "cold_penalty": 0.006,
+    "heat_penalty": 0.006,
+    "bite": 0.25,
+    "yield_": 0.6
+  },
+  "organism": {
+    "homeostasis": {
+      "setpoint": [
+        0.6,
+        0.6,
+        0.5
+      ],
+      "width": [
+        0.4,
+        0.4,
+        0.3
+      ],
+      "danger_lo": [
+        0.15,
+        0.15,
+        0.15
+      ],
+      "danger_hi": [
+        2.0,
+        2.0,
+        0.85
+      ]
+    },
+    "memory": {
+      "conf_base": 0.5,
+      "salience": 1.0,
+      "forget": 0.995,
+      "relax": 0.002,
+      "consolidate_every": 500,
+      "consolidate_conf": 0.5,
+      "target_threshold": 0.05
+    },
+    "world_model": {
+      "lr": 0.5,
+      "uncertainty_rate": 0.1,
+      "uncertainty_init": 0.01
+    },
+    "self_model": {
+      "drift_rate": 0.02,
+      "drift_eps": 0.0001,
+      "t_max": 20000.0
+    },
+    "drives": {
+      "gain_eta": 0.2,
+      "gain_tau": 20000.0,
+      "gain_max": 5.0,
+      "habit_eta": 0.05,
+      "habit_tau": 50000.0,
+      "lambda": [
+        0.5,
+        0.5,
+        0.0,
+        0.0
+      ],
+      "gamma": 0.97,
+      "explore_scale": 0.2,
+      "explore_unknown": 0.3,
+      "explore_uncertainty": 0.5,
+      "seek_unknown": 0.05
+    },
+    "arbitration": {
+      "persistence": 0.002
+    },
+    "lesions": {
+      "memory": "Intact",
+      "world_model": "Intact",
+      "self_model": "Intact",
+      "exploration": "Intact",
+      "drive_adaptation_off": false
+    }
+  }
+}

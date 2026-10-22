@@ -6,6 +6,7 @@ use std::path::Path;
 
 use crate::env::{RegimeOp, WorldParams};
 use crate::body::BodyParams;
+use crate::organism::OrganismParams;
 use crate::hash::hash_bytes;
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
@@ -13,6 +14,7 @@ use crate::hash::hash_bytes;
 pub struct Config {
     pub world: WorldParams,
     pub body: BodyParams,
+    pub organism: OrganismParams,
 }
 
 pub struct Loaded {

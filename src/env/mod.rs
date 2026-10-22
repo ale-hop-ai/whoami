@@ -92,10 +92,6 @@ impl World {
         let n = params.width * params.height;
         let mut w = World { params, tick: 0, layout: Layout::default(), cells: vec![Cell::default(); n] };
         w.recompute_caps();
-        for c in &mut w.cells {
-            c.food = c.cap_food;
-            c.water = c.cap_water;
-        }
         w
     }
 
@@ -178,6 +174,10 @@ impl World {
         (-1.0 + 2.0 * t) * p.gradient_strength
     }
 
+    /// Recompute caps and ambient from the layout. A cell whose cap rose is
+    /// filled to the new cap (a relocated patch arrives full: the organism's
+    /// problem is to find it, not to wait for it); a cell whose cap fell is
+    /// clamped.
     fn recompute_caps(&mut self) {
         let (fc, wc) = self.centers();
         for y in 0..self.params.height {
@@ -186,11 +186,11 @@ impl World {
                 let cap_water = self.cap_at((x, y), wc);
                 let ambient = self.ambient_at((x, y));
                 let c = self.cell_mut(x, y);
+                c.food = if cap_food > c.cap_food { cap_food } else { c.food.min(cap_food) };
+                c.water = if cap_water > c.cap_water { cap_water } else { c.water.min(cap_water) };
                 c.cap_food = cap_food;
                 c.cap_water = cap_water;
                 c.ambient = ambient;
-                c.food = c.food.min(cap_food);
-                c.water = c.water.min(cap_water);
             }
         }
     }
@@ -267,6 +267,15 @@ mod tests {
         assert!(w.cell(3, 8).cap_food < before[8 * 16 + 3].cap_food);
         w.apply_regime(RegimeOp::Scarcity);
         assert_eq!(w.cell(3, 8).cap_food, before[8 * 16 + 3].cap_food);
+    }
+
+    #[test]
+    fn relocated_patch_arrives_full() {
+        let mut w = World::new(WorldParams::default());
+        let (_, wc) = w.centers();
+        assert!(w.cell(wc.0, wc.1).food < 0.1);
+        w.apply_regime(RegimeOp::SwapPatches);
+        assert!(w.cell(wc.0, wc.1).food > 0.9);
     }
 
     #[test]

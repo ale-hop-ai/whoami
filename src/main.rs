@@ -7,8 +7,8 @@ use epi::config::Config;
 use epi::AgentKind;
 
 const USAGE: &str = "usage:
-  epi run  [--config C] [--seed S] [--ticks T] [--out DIR] [--agent random] [--log-every K]
-  epi hash [--config C] [--seed S] [--ticks T] [--agent random]";
+  epi run  [--config C] [--seed S] [--ticks T] [--out DIR] [--agent epi|random] [--log-every K]
+  epi hash [--config C] [--seed S] [--ticks T] [--agent epi|random]";
 
 struct Args {
     config: Option<PathBuf>,
@@ -20,7 +20,7 @@ struct Args {
 }
 
 fn parse(args: &[String]) -> Result<Args, String> {
-    let mut a = Args { config: None, seed: 0, ticks: 20_000, out: None, agent: AgentKind::Random, log_every: 1 };
+    let mut a = Args { config: None, seed: 0, ticks: 20_000, out: None, agent: AgentKind::Epi, log_every: 1 };
     let mut i = 0;
     while i < args.len() {
         let key = &args[i];

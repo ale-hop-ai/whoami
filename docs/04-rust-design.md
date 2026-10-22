@@ -92,17 +92,17 @@ pub struct Signals {
     pub predicted: [[f64; N_VARS]; N_ACTIONS],  // WorldModel: Δ̂[action][var]
     pub uncertainty: [f64; N_ACTIONS],          // WorldModel
     pub prediction_error: f64,                  // WorldModel
+    pub at_remembered: [f64; N_RESOURCES],      // WorldModel: predicted gain of consuming at remembered_prev
     pub remembered: [Remembered; N_RESOURCES],  // Memory (current tick)
     pub remembered_prev: [Remembered; N_RESOURCES], // Memory (previous tick; SelfModel reads this)
     pub neighbor_conf: [f64; 4],                // Memory, per move direction
     pub ttc: [f64; N_VARS],                     // SelfModel
     pub reach: [f64; N_RESOURCES],              // SelfModel
-    pub intake: [f64; N_RESOURCES],             // SelfModel
     pub urgency_prev: [f64; N_DRIVES],          // Drives (previous tick)
     pub bids: [[f64; N_ACTIONS]; N_DRIVES],     // Drives
     pub values: [[f64; N_ACTIONS]; N_DRIVES],   // Drives: value_d(a), logged for H6
 }
-pub struct Remembered { pub dir: Option<Action>, pub dist: u16, pub conf: f64 }
+pub struct Remembered { pub target: (usize, usize), pub dist: usize, pub conf: f64, pub amounts: [f64; N_RESOURCES], pub toward: [bool; 4] }
 
 // Each process: private fields; `fn step(&mut self, s: &Signals, p: &Params) -> Output`.
 // Processes never receive &mut Signals.

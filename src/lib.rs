@@ -5,7 +5,9 @@ pub mod env;
 pub mod experiment;
 pub mod hash;
 pub mod log;
+pub mod organism;
 pub mod rng;
+pub mod signals;
 pub mod sim;
 
 use std::path::Path;
@@ -18,14 +20,16 @@ use experiment::baselines::RandomAgent;
 /// Agents selectable from the CLI.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum AgentKind {
+    Epi,
     Random,
 }
 
 impl AgentKind {
     pub fn parse(s: &str) -> Result<AgentKind, String> {
         match s {
+            "epi" => Ok(AgentKind::Epi),
             "random" => Ok(AgentKind::Random),
-            other => Err(format!("unknown agent '{other}' (expected: random)")),
+            other => Err(format!("unknown agent '{other}' (expected: epi, random)")),
         }
     }
 }
@@ -38,6 +42,7 @@ pub fn start_position(w: &World) -> (usize, usize) {
 pub fn build_agent(kind: AgentKind, cfg: &Config, w: &World) -> Box<dyn Agent> {
     let pos = start_position(w);
     match kind {
+        AgentKind::Epi => Box::new(organism::Organism::new(cfg.organism.clone(), cfg.body.clone(), w, pos)),
         AgentKind::Random => Box::new(RandomAgent::new(cfg.body.clone(), pos)),
     }
 }

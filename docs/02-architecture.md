@@ -23,7 +23,9 @@ conflict, and a cycle aliases with the metric window).
 drawn from the environment seed. Operations are toggles, so the schedule
 cannot compound into an unviable world: `SwapPatches`, `RotateGradient` (90°),
 `Scarcity` (halve caps ↔ restore), `Spread` (move patches to opposite corners
-↔ restore). The schedule is deterministic given the seed and logged.
+↔ restore). A relocated patch arrives full: the organism's problem is to find
+it, not to wait for regrowth. The schedule is deterministic given the seed and
+logged.
 
 **Environment families.** A family is a named set of generator parameters
 (patch size, gradient strength, regrowth rate, regime op set). Phase 1 defines
@@ -95,19 +97,24 @@ Owns: per-action, per-variable linear weights `θ_{a,d}` over
 `φ(obs, a) = [1, dest food, dest water, dest ambient, E, H, Tb]` where *dest* is
 the cell the action lands on (the current cell for non-moves). Running squared
 error `u_{a,d}` (uncertainty).
-Learn: LMS on `Δ̂_d = θ_{a,d}·φ` against the realized body delta for the action
-taken. Output: `Δ̂[a][d]`, `uncertainty[a]`, scalar prediction error.
+Learn: normalized LMS on `Δ̂_d = θ_{a,d}·φ` against the realized body delta for
+the action taken. Output: `Δ̂[a][d]`, `uncertainty[a]`, scalar prediction
+error, and `at_remembered[r]`: the predicted gain of Eat (Drink) evaluated at
+the previous tick's remembered food (water) cell, using the remembered
+amounts there and the current ambient.
 Because `φ` carries destination features, the model can learn that moving
 toward the hot side raises Tb and that eating on a food cell raises E, without
 any rule naming those relations.
 
 ### 3.5 Self-model
-Owns: EMA drift rate per variable `ḋ_d`, EMA intake per Eat and per Drink.
-Input: realized deltas, action taken, previous-tick `Remembered`.
+Owns: EMA drift rate per variable `ḋ_d`.
+Input: realized deltas, previous-tick `Remembered`.
 Output: `ttc_d = clamp((v_d − danger_d)/max(−ḋ_d, ε), 0, T_max)`;
-`reach_r = Remembered[r].dist` in ticks (one move per tick; division dropped);
-`intake_r` estimates.
+`reach_r = Remembered[r].dist` in ticks (one move per tick; division dropped).
 Reads Memory's previous-tick output (documented lag, see §5).
+Amendment (M2): the intake EMA was dropped. Expected gain at a remembered
+cell is now the world model's prediction for consuming there (§3.4, §3.6), so
+one learned model prices both consumption and travel.
 
 ### 3.6 Drives
 Four drives: Energy, Hydration, Temp, Exploration. Each owns gain `g_d`,
@@ -120,21 +127,27 @@ nothing remembered → anticipation term 0).
 Bid: `bid_d(a) = g_d · u_d · value_d(a) · (1 + h_{d,a})`, where
 - for Eat, Drink, Rest, and for all actions of the Temp drive:
   `value_d(a) = Δ̂[a][d]` from the world model (learned);
-- for moves of Energy/Hydration: **authored fragment F1**:
-  `value = conf · intake_r · γ^dist` if `a` reduces distance to the remembered
-  resource, else `Δ̂[a][d]`. This is a hand-written rule mapping memory to
-  movement. It is declared here, listed in the frozen config, and is a Phase 4
-  replacement target (per-variable multi-step prediction). Critique A1 is
-  weakened accordingly: E1 tests memory, learned consumption, and arbitration,
-  not emergent navigation.
-- Exploration: urgency = mean `uncertainty`; **authored fragment F2**: bids
-  favor the move whose destination has lowest neighbor memory confidence, and
-  the action with highest `uncertainty[a]`.
+- for moves of Energy/Hydration with a remembered target: **authored
+  fragment F1**: `value = conf · at_remembered[r] · γ^dist` if `a` reduces
+  distance to the remembered resource, else `Δ̂[a][d]`. This is a hand-written
+  rule mapping memory to movement; the price is learned. It is declared here,
+  listed in the frozen config, and is a Phase 4 replacement target
+  (per-variable multi-step prediction). Critique A1 is weakened accordingly:
+  E1 tests memory, learned consumption, and arbitration, not emergent
+  navigation.
+- for moves of Energy/Hydration with **no** remembered target: **authored
+  fragment F2**: `value = seek_unknown · (1 − neighbor_conf[a])`. A drive that
+  has lost its resource searches where memory is weakest, scaled by its own
+  urgency. (Amendment M2: without this, a drive whose target vanished after a
+  regime shift had no positive-valued action and the organism starved in place.)
+- Exploration: urgency = `explore_scale · sqrt(mean uncertainty)`; F2 again
+  (least-known neighbor) plus a term favoring the action with the highest
+  relative `uncertainty[a]`.
 
 **Adaptation (three carriers, each pre-registered).**
 - *Gain, fast up / slow down.* On an edge-triggered danger event for d:
-  `g_d ← g_d + η`. Otherwise `g_d` relaxes toward 1 with time constant
-  `τ_g = 20 000` ticks (the full run), not quickly. This is negative feedback
+  `g_d ← min(g_d + η, g_max)`. Otherwise `g_d` relaxes toward 1 with time
+  constant `τ_g = 20 000` ticks (the full run), not quickly. This is negative feedback
   with long hysteresis, and is named as such.
 - *Habit, positive feedback.* When drive d's bid for the chosen action was the
   largest contributor and `e_d` decreased on the next tick:
@@ -174,7 +187,8 @@ Env  ──obs──▶ Perception ──obs──▶ Memory, WorldModel (φ, pr
 WorldModel ──Δ̂, uncertainty──▶ Drives
 WorldModel ──prediction error──▶ Memory (salience)
 Memory ──Remembered, neighbor conf──▶ Drives, SelfModel (lagged one tick)
-SelfModel ──ttc, reach, intake──▶ Drives
+SelfModel ──ttc, reach──▶ Drives
+WorldModel ──at_remembered──▶ Drives (F1 price; reads previous-tick Remembered)
 Drives ──urgency──▶ Memory (lagged one tick)
 Drives ──bids──▶ Arbitration ──action──▶ Body/Env
 Arbitration ──prev action──▶ Arbitration (persistence), Drives (habit credit)

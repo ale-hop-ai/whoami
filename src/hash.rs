@@ -14,6 +14,10 @@ impl Fnv {
         Fnv::default()
     }
 
+    pub fn from_state(state: u64) -> Fnv {
+        Fnv(state)
+    }
+
     pub fn write(&mut self, bytes: &[u8]) {
         for &b in bytes {
             self.0 ^= b as u64;

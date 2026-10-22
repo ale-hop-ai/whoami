@@ -32,8 +32,8 @@ impl Streams {
 
 /// Run `ticks` ticks or until death. The trajectory hash covers
 /// (tick, action, body) each tick, so any divergence in dynamics shows up.
-pub fn run(world: &mut World, agent: &mut dyn Agent, streams: &mut Streams, ticks: u64, log: &mut Logger) -> RunResult {
-    let mut hash = Fnv::new();
+/// `hash` is carried by the caller so it survives snapshots.
+pub fn run(world: &mut World, agent: &mut dyn Agent, streams: &mut Streams, ticks: u64, log: &mut Logger, hash: &mut Fnv) -> RunResult {
     let start = world.tick;
     let mut ticks_alive = 0;
     while world.tick - start < ticks && agent.body().alive {

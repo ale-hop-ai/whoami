@@ -6,7 +6,7 @@ Single crate, single binary. No workspace until a concrete need appears.
 
 | Crate | Why | Alternative rejected |
 |-------|-----|----------------------|
-| `serde`, `serde_json` | snapshots, config, JSONL logs | hand-written JSON: more code, more bugs |
+| `serde`, `serde_json` (`float_roundtrip`) | snapshots, config, JSONL logs | hand-written JSON: more code, more bugs |
 
 Nothing else:
 - RNG: own `xoshiro256**` + `splitmix64` seeding, ~50 lines. No `rand`.
@@ -190,8 +190,10 @@ pub enum Event<'a> {
   hash; CI compares hashes on one pinned toolchain.
 - Every `Signals` field is asserted finite in debug builds. `ttc` is clamped
   to `[0, T_max]`, `reach` to `[1, ∞)` with `∞` encoded as `T_max`.
-- Snapshot JSON: f64 serialized by `serde_json` default; non-finite values are
-  a bug caught by the debug assertion, not a supported state.
+- Snapshot JSON: f64 through `serde_json` with the `float_roundtrip` feature
+  (without it, parsing is not correctly rounded and a resumed run drifts by
+  one ulp in derived fields; found by the roundtrip test). Non-finite values
+  are a bug caught by the debug assertion, not a supported state.
 - Trajectory hash: FNV-1a over `(t, action index, body.v[i].to_bits())`.
 - Config hash: FNV-1a over the **raw config file bytes**, not a re-serialized value.
 - Snapshot roundtrip test: run to N, snapshot, continue to M; equals direct run to M.
